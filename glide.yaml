@@ -1,0 +1,11 @@
+package: github.com/abutaha/aws-es-proxy
+license: Apache
+owners:
+- name: Muslim AbuTaha
+  email: muslim.adel@gmail.com
+import:
+- package: github.com/aws/aws-sdk-go
+  version: ^1.4.22
+  subpackages:
+  - aws/session
+  - aws/signer/v4
