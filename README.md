@@ -10,7 +10,7 @@ Kibana requests are also signed automatically.
 
 **aws-es-proxy** has single executable binaries for Linux, Mac and Windows.
 
-Download the latest [aws-es-proxy release](http://google.com).
+Download the latest [aws-es-proxy release](https://github.com/abutaha/aws-es-proxy/releases/).
 
 
 ### Build from Source
