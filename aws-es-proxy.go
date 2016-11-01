@@ -23,6 +23,7 @@ type proxy struct {
 	Region  string
 	Service string
 	Verbose bool
+	Signer  *v4.Signer
 }
 
 func copyHeaders(dst, src http.Header) {
@@ -100,16 +101,9 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start AWS session from ENV, Shared Creds or EC2Role
-	sess, err := session.NewSession()
-	if err != nil {
-		log.Fatalln(err)
-	}
-
 	// Sign the request with AWSv4
-	signer := v4.NewSigner(sess.Config.Credentials)
 	payload := bytes.NewReader(replaceBody(req))
-	signer.Sign(req, payload, p.Service, p.Region, time.Now())
+	p.Signer.Sign(req, payload, p.Service, p.Region, time.Now())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -157,7 +151,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	mux := &proxy{Verbose: verbose}
+	// Start AWS session from ENV, Shared Creds or EC2Role
+	sess, err := session.NewSession()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	signer := v4.NewSigner(sess.Config.Credentials)
+
+	mux := &proxy{Verbose: verbose, Signer: signer}
 	parseEndpoint(endpoint, mux)
 
 	fmt.Printf("Listening on %s\n", listenAddress)
