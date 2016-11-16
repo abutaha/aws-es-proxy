@@ -1,4 +1,4 @@
-#aws-auth-proxy
+#aws-es-proxy
 
 **aws-es-proxy** is a small web server application sitting between your HTTP client (browser, curl, etc...) and Amazon Elasticsearch service. It will sign your requests using latest [AWS Signature Version 4](http://docs.aws.amazon.com/general/latest/gr/signature-version-4.html) before sending the request to Amazon Elasticsearch. When response is back from Amazon Elasticsearch, this response will be sent back to your HTTP client.
 
