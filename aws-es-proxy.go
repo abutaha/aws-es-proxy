@@ -101,6 +101,11 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Workaround for ES 5.1 and Kibana 5.1.1
+	if val, ok := r.Header["Kbn-Version"]; ok {
+		req.Header.Set("Kbn-Version", val[0])
+	}
+
 	// Sign the request with AWSv4
 	payload := bytes.NewReader(replaceBody(req))
 	p.Signer.Sign(req, payload, p.Service, p.Region, time.Now())
