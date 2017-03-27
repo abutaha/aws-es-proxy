@@ -1,10 +1,10 @@
-#aws-es-proxy
+# aws-es-proxy
 
 **aws-es-proxy** is a small web server application sitting between your HTTP client (browser, curl, etc...) and Amazon Elasticsearch service. It will sign your requests using latest [AWS Signature Version 4](http://docs.aws.amazon.com/general/latest/gr/signature-version-4.html) before sending the request to Amazon Elasticsearch. When response is back from Amazon Elasticsearch, this response will be sent back to your HTTP client.
 
 Kibana requests are also signed automatically.
 
-##Installation
+## Installation
 
 ### Download binary executable:
 
@@ -50,7 +50,7 @@ export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
 
 **aws-es-proxy** also supports `IAM roles`. To use IAM roles, you need to modify your Amazon Elasticsearch access policy to allow access from that role. Below is an Amazon Elasticsearch `access policy` example allowing access from any EC2 instance with an IAM role called `ec2-aws-elasticsearch`.
 
-```
+```json
 {
   "Version": "2012-10-17",
   "Statement": [
@@ -68,7 +68,7 @@ export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
 
 
 
-##Usage example:
+## Usage example:
 
 ```sh
 ./aws-es-proxy -endpoint https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
@@ -77,14 +77,14 @@ Listening on 127.0.0.1:9200
 
 *aws-es-proxy* listens on 127.0.0.1:9200 if no additional argument is provided. You can change the IP and Port passing the argument `-listen`
 
-```
+```sh
 ./aws-es-proxy -listen :8080 -endpoint ...
 ./aws-es-proxy -listen 10.0.0.1:9200 -endpoint ...
 ```
 
 By default, *aws-es-proxy* will not display any message in the console. However, it has the ability to print requests being sent to Amazon Elasticsearch, and the duration it takes to receive the request back. This can be enabled using the option `-verbose`
 
-```
+```sh
 ./aws-es-proxy -verbose ...
 Listening on 127.0.0.1:9200
 2016/10/31 19:48:23  -> GET / 200 1.054s
@@ -96,7 +96,7 @@ Listening on 127.0.0.1:9200
 
 For a full list of available options, use `-h`:
 
-```
+```sh
 ./aws-es-proxy -h
 Usage of ./aws-es-proxy:
   -endpoint string
@@ -107,7 +107,7 @@ Usage of ./aws-es-proxy:
         Print user requests
 ```
 
-##Using HTTP Clients
+## Using HTTP Clients
 
 After you run *aws-es-proxy*, you can now open your Web browser on [http://localhost:9200](http://localhost:9200). Everything should be working as you have your own instance of ElasticSearch running on port 9200.
 
