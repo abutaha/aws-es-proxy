@@ -31,7 +31,7 @@ glide install
 go build github.com/abutaha/aws-es-proxy
 ```
 
-##Configuring Credentials
+## Configuring Credentials
 
 Before using **aws-es-proxy**, ensure that you've configured your AWS IAM user credentials. The best way to configure credentials on a development machine is to use the `~/.aws/credentials` file, which might look like:
 
