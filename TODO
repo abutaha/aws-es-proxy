@@ -1,0 +1,2 @@
+* Revamp the code. There's a lot of memory wasting
+* Allow user to select different AWS profiles instead of always using the default one.
