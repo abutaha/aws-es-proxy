@@ -1,12 +1,10 @@
 FROM golang:1.8
 
-ENV arguments "-h"
-
 WORKDIR /go/src/app
 COPY . .
 
 RUN go-wrapper download
 RUN go-wrapper install
-RUN go build
+RUN go build -o aws-es-proxy
 
-CMD go-wrapper run ${arguments}
+CMD ["./aws-es-proxy", "-h"]

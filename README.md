@@ -109,15 +109,15 @@ Usage of ./aws-es-proxy:
 
 ## Docker
 
-There is a docker image avaiable for aws-es-proxy. There is an image on docker hub called `gorillastack/aws-es-proxy`.  Supply command line arguments by passing an environment variable called `arguments`.
-
-To run the image:
+There is a docker image avaiable for aws-es-proxy. There is an image on docker hub called `gorillastack/aws-es-proxy`. To run the image:
 
 ```sh
-docker run --rm -e arguments="-endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com" -i gorillastack/aws-es-proxy
-```
+# Prints usage info (-h)
+docker run --rm -it gorillastack/aws-es-proxy
 
-If no arguments environment variable is set, -h will be used by default, printing the usage.
+# Runs with custom command/args
+docker run --rm -it gorillastack/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
+```
 
 ## Using HTTP Clients
 
