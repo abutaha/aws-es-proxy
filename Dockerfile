@@ -1,10 +1,12 @@
 FROM golang:1.8
 
+ENV arguments
+
 WORKDIR /go/src/app
 COPY . .
 
-RUN go-wrapper download   # "go get -d -v ./..."
-RUN go-wrapper install    # "go install -v ./..."
+RUN go-wrapper download
+RUN go-wrapper install
 RUN go build
 
-CMD ["go-wrapper", "run"] # ["app"]
+CMD ["go-wrapper", "run", "${arguments}"]
