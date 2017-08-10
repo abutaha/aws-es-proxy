@@ -16,18 +16,33 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/signer/v4"
 )
 
 type proxy struct {
-	Scheme   string
-	Host     string
-	Region   string
-	Service  string
-	Verbose  bool
-	Prettify bool
-	Signer   *v4.Signer
+	Scheme      string
+	Host        string
+	Region      string
+	Service     string
+	Verbose     bool
+	Prettify    bool
+	Credentials *credentials.Credentials
+}
+
+func getSigner(p *proxy) *v4.Signer {
+	if p.Credentials == nil {
+		p.Credentials = getCredentials()
+	}
+	return v4.NewSigner(p.Credentials)
+}
+
+func getCredentials() *credentials.Credentials {
+	sess := session.Must(session.NewSession())
+	credentials := sess.Config.Credentials
+	log.Print("Generated fresh AWS Credentials object")
+	return credentials
 }
 
 func copyHeaders(dst, src http.Header) {
@@ -83,7 +98,6 @@ func parseEndpoint(endpoint string, p *proxy) {
 	p.Host = link.Host
 	p.Region = region
 	p.Service = service
-
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -111,14 +125,22 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("Kbn-Version", val[0])
 	}
 
+	// Start AWS session from ENV, Shared Creds or EC2Role
+	signer := getSigner(p)
+
 	// Sign the request with AWSv4
 	payload := bytes.NewReader(replaceBody(req))
-	p.Signer.Sign(req, payload, p.Service, p.Region, time.Now())
+	signer.Sign(req, payload, p.Service, p.Region, time.Now())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Println(err)
 		respondError(err)
+		return
+	}
+
+	if resp.StatusCode == 403 {
+		p.Credentials = nil
 		return
 	}
 
@@ -198,14 +220,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start AWS session from ENV, Shared Creds or EC2Role
-	sess, err := session.NewSession()
-	if err != nil {
-		log.Fatalln(err)
-	}
-	signer := v4.NewSigner(sess.Config.Credentials)
-
-	mux := &proxy{Verbose: verbose, Prettify: prettify, Signer: signer}
+	mux := &proxy{Verbose: verbose, Prettify: prettify}
 	parseEndpoint(endpoint, mux)
 
 	fmt.Printf("Listening on %s\n", listenAddress)
