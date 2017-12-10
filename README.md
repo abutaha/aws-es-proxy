@@ -16,7 +16,7 @@ Download the latest [aws-es-proxy release](https://github.com/abutaha/aws-es-pro
 ### Build from Source
 
 #### Dependencies:
-* go1.5
+* go1.5+
 * [glide package manager](https://github.com/Masterminds/glide)
 
 
@@ -103,6 +103,12 @@ Usage of ./aws-es-proxy:
         Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)
   -listen string
         Local TCP port to listen on (default "127.0.0.1:9200")
+  -log-to-file
+        Log user requests and ElasticSearch responses to files
+  -no-sign-reqs
+        Disable AWS Signature v4
+  -pretty
+        Prettify verbose and file output
   -verbose
         Print user requests
 ```
