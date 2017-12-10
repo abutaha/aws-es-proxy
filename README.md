@@ -107,6 +107,20 @@ Usage of ./aws-es-proxy:
         Print user requests
 ```
 
+## Docker
+
+There is a docker image avaiable for aws-es-proxy. There is an image on docker hub called `gorillastack/aws-es-proxy`. To run the image:
+
+```sh
+# Prints usage info (-h)
+docker run --rm -it gorillastack/aws-es-proxy
+
+# Runs with custom command/args
+docker run --rm -it gorillastack/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
+```
+
+To expose a port number other than the default 9200, pass an environment variable of `PORT_NUM` to docker with the port number you wish to expose for your service.
+
 ## Using HTTP Clients
 
 After you run *aws-es-proxy*, you can now open your Web browser on [http://localhost:9200](http://localhost:9200). Everything should be working as you have your own instance of ElasticSearch running on port 9200.
