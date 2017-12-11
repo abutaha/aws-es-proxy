@@ -262,9 +262,7 @@ func addHeaders(src, dest http.Header) {
 	}
 
 	if val, ok := src["Content-Type"]; ok {
-		if val[0] == "application/json" {
-			dest.Add("Content-Type", "application/json")
-		}
+		dest.Add("Content-Type", val[0])
 	}
 }
 
