@@ -223,10 +223,11 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.logtofile {
-		requestID := fmt.Sprintf("%s", uuid.NewV4().String())
+
+		requestID, _ := uuid.NewV4()
 
 		reqStruct := &requestStruct{
-			Requestid:  requestID,
+			Requestid:  requestID.String(),
 			Datetime:   time.Now().Format("2006/01/02 15:04:05"),
 			Remoteaddr: r.RemoteAddr,
 			Requesturi: ep.RequestURI(),
@@ -237,7 +238,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		respStruct := &responseStruct{
-			Requestid: requestID,
+			Requestid: requestID.String(),
 			Body:      string(body.Bytes()),
 		}
 
@@ -326,8 +327,10 @@ func main() {
 	}
 
 	if p.logtofile {
-		requestFname := fmt.Sprintf("request-%s.log", uuid.NewV4().String())
-		responseFname := fmt.Sprintf("response-%s.log", uuid.NewV4().String())
+		u1, _ := uuid.NewV4()
+		u2, _ := uuid.NewV4()
+		requestFname := fmt.Sprintf("request-%s.log", u1.String())
+		responseFname := fmt.Sprintf("response-%s.log", u2.String())
 
 		if fileRequest, err = os.Create(requestFname); err != nil {
 			log.Fatalln(err.Error())
