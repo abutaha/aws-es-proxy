@@ -5,7 +5,10 @@ owners:
   email: muslim.adel@gmail.com
 import:
 - package: github.com/aws/aws-sdk-go
-  version: ^1.4.22
+  version: ~v1.12.61
   subpackages:
+  - aws/credentials
   - aws/session
   - aws/signer/v4
+- package: github.com/satori/go.uuid
+  version: 36e9d2ebbde5e3f13ab2e25625fd453271d6522e

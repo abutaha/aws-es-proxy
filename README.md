@@ -115,14 +115,14 @@ Usage of ./aws-es-proxy:
 
 ## Docker
 
-There is a docker image avaiable for aws-es-proxy. There is an image on docker hub called `gorillastack/aws-es-proxy`. To run the image:
+There is an official docker image avaiable for aws-es-proxy. To run the image:
 
 ```sh
 # Prints usage info (-h)
-docker run --rm -it gorillastack/aws-es-proxy
+docker run --rm -it abutaha/aws-es-proxy
 
 # Runs with custom command/args
-docker run --rm -it gorillastack/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
+docker run --rm -it abutaha/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
 ```
 
 To expose a port number other than the default 9200, pass an environment variable of `PORT_NUM` to docker with the port number you wish to expose for your service.
