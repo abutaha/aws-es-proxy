@@ -49,18 +49,23 @@ type proxy struct {
 	prettify     bool
 	logtofile    bool
 	nosignreq    bool
+	nodupslash   bool
 	fileRequest  *os.File
 	fileResponse *os.File
 	credentials  *credentials.Credentials
+	re           *regexp.Regexp
 }
 
 func newProxy(args ...interface{}) *proxy {
 	return &proxy{
-		endpoint:  args[0].(string),
-		verbose:   args[1].(bool),
-		prettify:  args[2].(bool),
-		logtofile: args[3].(bool),
-		nosignreq: args[4].(bool),
+		endpoint:   args[0].(string),
+		verbose:    args[1].(bool),
+		prettify:   args[2].(bool),
+		logtofile:  args[3].(bool),
+		nosignreq:  args[4].(bool),
+		nodupslash: args[5].(bool),
+		// This regexp finds all multiple consecutive slashes in URL paths.
+		re: regexp.MustCompile(`//+`),
 	}
 }
 
@@ -120,13 +125,30 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestStarted := time.Now()
 	dump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		log.Fatalln("error while dumping request. Error: ", err.Error())
+		log.Fatalln("error while dumping incoming request. Error: ", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
 
 	ep := *r.URL
+	if p.nodupslash {
+		// AWS doesn't seem to like urls with consecutive double-slashes, so get rid of any
+		// from the incoming request.
+		if p.verbose {
+			fmt.Printf("INCOMING HTTP REQUEST PATH: %s\n", ep.Path)
+			fmt.Printf("INCOMING HTTP REQUEST RAW PATH: %s\n", ep.RawPath)
+		}
+		// replace all multiple consecutive slashes with just one slash
+		ep.Path = p.re.ReplaceAllString(ep.Path, `/`)
+		// replace all multiple consecutive slashes with just one slash
+		ep.RawPath = p.re.ReplaceAllString(ep.RawPath, `/`)
+		if p.verbose {
+			fmt.Printf("INCOMING fixed HTTP REQUEST PATH: %s\n", ep.Path)
+			fmt.Printf("INCOMING fixed HTTP REQUEST RAW PATH: %s\n", ep.RawPath)
+		}
+	}
+
 	ep.Host = p.host
 	ep.Scheme = p.scheme
 
@@ -292,6 +314,7 @@ func main() {
 		prettify      bool
 		logtofile     bool
 		nosignreq     bool
+		nodupslash    bool
 		endpoint      string
 		listenAddress string
 		fileRequest   *os.File
@@ -305,6 +328,7 @@ func main() {
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
+	flag.BoolVar(&nodupslash, "no-dup-slashes", false, "Remove superfluous slashes from paths")
 	flag.Parse()
 
 	if len(os.Args) < 3 {
@@ -319,6 +343,7 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
+		nodupslash,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
