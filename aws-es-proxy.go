@@ -52,6 +52,7 @@ type proxy struct {
 	fileRequest  *os.File
 	fileResponse *os.File
 	credentials  *credentials.Credentials
+	client       *http.Client
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -62,6 +63,14 @@ func newProxy(args ...interface{}) *proxy {
 		logtofile: args[3].(bool),
 		nosignreq: args[4].(bool),
 	}
+}
+
+var client = &http.Client{
+	CheckRedirect: noRedirect,
+}
+
+func noRedirect(req *http.Request, via []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 func (p *proxy) parseEndpoint() error {
@@ -149,7 +158,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		signer.Sign(req, payload, p.service, p.region, time.Now())
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Fatalln(err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
