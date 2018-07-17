@@ -52,6 +52,7 @@ Alternatively, you can set the following environment variables:
 ```
 export AWS_ACCESS_KEY_ID=AKID1234567890
 export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
+export AWS_CREDENTIAL_FILE="<Path to the credentials file>"
 ```
 
 **aws-es-proxy** also supports `IAM roles`. To use IAM roles, you need to modify your Amazon Elasticsearch access policy to allow access from that role. Below is an Amazon Elasticsearch `access policy` example allowing access from any EC2 instance with an IAM role called `ec2-aws-elasticsearch`.
