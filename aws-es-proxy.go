@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -129,6 +130,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ep := *r.URL
 	ep.Host = p.host
 	ep.Scheme = p.scheme
+	ep.Path = path.Clean(ep.Path)
 
 	req, err := http.NewRequest(r.Method, ep.String(), r.Body)
 	if err != nil {
