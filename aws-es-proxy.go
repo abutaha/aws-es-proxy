@@ -160,7 +160,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// AWS credentials expired, need to generate fresh ones
 		if resp.StatusCode == 403 {
 			p.credentials = nil
-			return
 		}
 	}
 
