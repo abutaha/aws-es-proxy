@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="0.8"
+VERSION="0.9"
 
 rm -rf dist; mkdir -p dist
 for GOOS in darwin linux windows; do
