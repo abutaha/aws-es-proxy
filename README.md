@@ -19,17 +19,14 @@ Download the latest [aws-es-proxy release](https://github.com/abutaha/aws-es-pro
 There is an official docker image avaiable for aws-es-proxy. To run the image:
 
 ```sh
-# Prints usage info (-h)
-docker run --rm -it abutaha/aws-es-proxy
+# v0.9 and newer (latest always point to the latest release):
+
+docker run --rm -it abutaha/aws-es-proxy:0.9 -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
 
 v.08:
 
-# Runs with custom command/args
 docker run --rm -it abutaha/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
 
-v0.9:
-
-docker run -it abutaha/aws-es-proxy:0.9 -verbose
 ```
 
 To expose a port number other than the default 9200, pass an environment variable of `PORT_NUM` to docker with the port number you wish to expose for your service.
