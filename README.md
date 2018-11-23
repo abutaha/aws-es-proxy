@@ -1,5 +1,7 @@
 # aws-es-proxy
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/abutaha/aws-es-proxy.svg)](https://hub.docker.com/r/abutaha/aws-es-proxy/)
+
 **aws-es-proxy** is a small web server application sitting between your HTTP client (browser, curl, etc...) and Amazon Elasticsearch service. It will sign your requests using latest [AWS Signature Version 4](http://docs.aws.amazon.com/general/latest/gr/signature-version-4.html) before sending the request to Amazon Elasticsearch. When response is back from Amazon Elasticsearch, this response will be sent back to your HTTP client.
 
 Kibana requests are also signed automatically.
@@ -12,12 +14,25 @@ Kibana requests are also signed automatically.
 
 Download the latest [aws-es-proxy release](https://github.com/abutaha/aws-es-proxy/releases/).
 
+### Docker
+
+There is an official docker image avaiable for aws-es-proxy. To run the image:
+
+```sh
+# Prints usage info (-h)
+docker run --rm -it abutaha/aws-es-proxy
+
+# Runs with custom command/args
+docker run --rm -it abutaha/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
+```
+
+To expose a port number other than the default 9200, pass an environment variable of `PORT_NUM` to docker with the port number you wish to expose for your service.
+
 ### Via homebrew
 
 ```sh
 brew install aws-es-proxy
 ```
-
 
 ### Build from Source
 
@@ -119,19 +134,6 @@ Usage of ./aws-es-proxy:
         Print user requests
 ```
 
-## Docker
-
-There is an official docker image avaiable for aws-es-proxy. To run the image:
-
-```sh
-# Prints usage info (-h)
-docker run --rm -it abutaha/aws-es-proxy
-
-# Runs with custom command/args
-docker run --rm -it abutaha/aws-es-proxy ./aws-es-proxy -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
-```
-
-To expose a port number other than the default 9200, pass an environment variable of `PORT_NUM` to docker with the port number you wish to expose for your service.
 
 ## Using HTTP Clients
 
