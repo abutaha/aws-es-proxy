@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/signer/v4"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	uuid "github.com/satori/go.uuid"
@@ -42,6 +43,66 @@ type responseStruct struct {
 	Body      string
 }
 
+type prometheusConfiguration struct {
+	requestDurationBuckets []float64
+	requestSizeBuckets     []float64
+	responseSizeBuckets    []float64
+}
+
+func csvToBucket(csv string, parser func(string) (float64, error)) ([]float64, error) {
+	values := strings.Split(csv, ",")
+	bucket := make([]float64, 0, len(values))
+	for _, current := range values {
+		val, err := parser(strings.TrimSpace(current))
+		if err != nil {
+			return nil, err
+		}
+		bucket = append(bucket, val)
+	}
+
+	return bucket, nil
+}
+
+func newPrometheusConfiguration(requestDurationBucketsCSV string, requestSizeBucketsCSV string, responseSizeBucketCSVs string) (*prometheusConfiguration, error) {
+
+	requestDurationBuckets, err := csvToBucket(requestDurationBucketsCSV, func(csv string) (float64, error) {
+		duration, err := time.ParseDuration(csv)
+		if err != nil {
+			return 0.0, err
+		}
+
+		return duration.Seconds(), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sizeParser := func(csv string) (float64, error) {
+		size, err := humanize.ParseBytes(csv)
+		if err != nil {
+			return 0.0, err
+		}
+
+		return float64(size), nil
+	}
+
+	requestSizeBuckets, err := csvToBucket(requestSizeBucketsCSV, sizeParser)
+	if err != nil {
+		return nil, err
+	}
+
+	responseSizeBuckets, err := csvToBucket(responseSizeBucketCSVs, sizeParser)
+	if err != nil {
+		return nil, err
+	}
+
+	return &prometheusConfiguration{
+		requestDurationBuckets: requestDurationBuckets,
+		requestSizeBuckets:     requestSizeBuckets,
+		responseSizeBuckets:    responseSizeBuckets,
+	}, nil
+}
+
 type proxy struct {
 	scheme       string
 	host         string
@@ -58,6 +119,7 @@ type proxy struct {
 }
 
 func newProxy(args ...interface{}) *proxy {
+
 	return &proxy{
 		endpoint:  args[0].(string),
 		verbose:   args[1].(bool),
@@ -349,7 +411,7 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
-func instrumentHandler(metricPrefix string, handler http.Handler) http.Handler {
+func instrumentHandler(metricPrefix string, prometheusConfig *prometheusConfiguration, handler http.Handler) http.Handler {
 	requestTotal := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: metricPrefix + "_requests_total",
@@ -375,7 +437,7 @@ func instrumentHandler(metricPrefix string, handler http.Handler) http.Handler {
 		prometheus.HistogramOpts{
 			Name:    metricPrefix + "request_size_bytes",
 			Help:    "A histogram of response sizes for requests.",
-			Buckets: []float64{200, 500, 900, 1500},
+			Buckets: prometheusConfig.requestSizeBuckets,
 		},
 		[]string{},
 	)
@@ -386,7 +448,7 @@ func instrumentHandler(metricPrefix string, handler http.Handler) http.Handler {
 		prometheus.HistogramOpts{
 			Name:    metricPrefix + "response_size_bytes",
 			Help:    "A histogram of response sizes for requests.",
-			Buckets: []float64{200, 500, 900, 1500},
+			Buckets: prometheusConfig.responseSizeBuckets,
 		},
 		[]string{},
 	)
@@ -396,7 +458,7 @@ func instrumentHandler(metricPrefix string, handler http.Handler) http.Handler {
 		prometheus.HistogramOpts{
 			Name:    metricPrefix + "request_duration_seconds",
 			Help:    "A histogram of latencies for requests.",
-			Buckets: []float64{.25, .5, 1, 2.5, 5, 10},
+			Buckets: prometheusConfig.requestDurationBuckets,
 		},
 		[]string{"code", "method"},
 	)
@@ -436,6 +498,9 @@ func main() {
 		managementListenAddress string
 		fileRequest             *os.File
 		fileResponse            *os.File
+		requestSizeBuckets      string
+		requestDurationBuckets  string
+		responseSizeBuckets     string
 		err                     error
 	)
 
@@ -446,6 +511,9 @@ func main() {
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
+	flag.StringVar(&requestDurationBuckets, "request-duration-buckets", "10ms,50ms,100ms,250ms,500ms,1s,5s", "Prometheus request duration buckets")
+	flag.StringVar(&requestSizeBuckets, "request-size-buckets", "128B,256B,512B,1Kb,2Kb,5Kb,25Kb,100Kb,500Kb,1M,2M,5M", "Prometheus request size buckets")
+	flag.StringVar(&responseSizeBuckets, "response-size-buckets", "128B,256B,512B,1Kb,2Kb,5Kb,25Kb,100Kb,500Kb,1M,2M,5M", "Prometheus response size buckets")
 	flag.Parse()
 
 	if len(os.Args) < 3 {
@@ -462,9 +530,13 @@ func main() {
 		nosignreq,
 	)
 
+	prometheusConfig, err := newPrometheusConfiguration(requestDurationBuckets, requestSizeBuckets, responseSizeBuckets)
+	if err != nil {
+		log.Fatalf("Cannot parse prometheus configuration: %v", err)
+	}
+
 	if err = p.parseEndpoint(); err != nil {
 		log.Fatalln(err)
-		os.Exit(1)
 	}
 
 	if p.logtofile {
@@ -499,5 +571,5 @@ func main() {
 	}()
 
 	log.Printf("Listening on %s...\n", listenAddress)
-	log.Fatal(http.ListenAndServe(listenAddress, instrumentHandler("aws_es_proxy_handler", p)))
+	log.Fatal(http.ListenAndServe(listenAddress, instrumentHandler("aws_es_proxy_handler", prometheusConfig, p)))
 }
