@@ -118,12 +118,19 @@ func (p *proxy) getSigner() *v4.Signer {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	status, err := p.handleRequest(w, r)
+	if err != nil {
+		log.Fatalln(err.Error())
+		http.Error(w, err.Error(), status)
+		return
+	}
+}
+
+func (p *proxy) handleRequest(w http.ResponseWriter, r *http.Request) (int, error) {
 	requestStarted := time.Now()
 	dump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		log.Fatalln("error while dumping request. Error: ", err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return http.StatusInternalServerError, fmt.Errorf("error while dumping request: %s", err)
 	}
 	defer r.Body.Close()
 
@@ -134,9 +141,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequest(r.Method, ep.String(), r.Body)
 	if err != nil {
-		log.Fatalln("error creating new request. ", err.Error())
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return http.StatusBadRequest, fmt.Errorf("error creating new request: %s", err)
 	}
 
 	addHeaders(r.Header, req.Header)
@@ -153,20 +158,17 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatalln(err.Error())
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return http.StatusBadRequest, err
 	}
+	defer resp.Body.Close()
 
 	if !p.nosignreq {
 		// AWS credentials expired, need to generate fresh ones
 		if resp.StatusCode == 403 {
 			p.credentials = nil
-			return
+			return resp.StatusCode, nil
 		}
 	}
-
-	defer resp.Body.Close()
 
 	// Write back headers to requesting client
 	copyHeaders(w.Header(), resp.Header)
@@ -174,8 +176,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send response back to requesting client
 	body := bytes.Buffer{}
 	if _, err := io.Copy(&body, resp.Body); err != nil {
-		log.Fatalln(err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return http.StatusInternalServerError, err
 	}
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body.Bytes())
@@ -252,6 +253,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.fileResponse.WriteString("\n")
 
 	}
+	return resp.StatusCode, nil
 
 }
 
