@@ -153,7 +153,9 @@ func (p *proxy) handleRequest(w http.ResponseWriter, r *http.Request) (int, erro
 
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
-		signer.Sign(req, payload, p.service, p.region, time.Now())
+		if _, err := signer.Sign(req, payload, p.service, p.region, time.Now()); err != nil {
+			return http.StatusBadRequest, fmt.Errorf("error signing request: %s", err)
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -179,7 +181,9 @@ func (p *proxy) handleRequest(w http.ResponseWriter, r *http.Request) (int, erro
 		return http.StatusInternalServerError, err
 	}
 	w.WriteHeader(resp.StatusCode)
-	w.Write(body.Bytes())
+	if n, err := w.Write(body.Bytes()); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("error writing response after %d bytes: %s", n, err)
+	}
 
 	requestEnded := time.Since(requestStarted)
 
