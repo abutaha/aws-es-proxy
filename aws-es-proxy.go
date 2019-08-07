@@ -19,6 +19,7 @@ import (
 
 	// log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/aws/signer/v4"
 	uuid "github.com/satori/go.uuid"
@@ -50,6 +51,7 @@ type proxy struct {
 	prettify     bool
 	logtofile    bool
 	nosignreq    bool
+	assumeRole   string
 	fileRequest  *os.File
 	fileResponse *os.File
 	credentials  *credentials.Credentials
@@ -57,11 +59,12 @@ type proxy struct {
 
 func newProxy(args ...interface{}) *proxy {
 	return &proxy{
-		endpoint:  args[0].(string),
-		verbose:   args[1].(bool),
-		prettify:  args[2].(bool),
-		logtofile: args[3].(bool),
-		nosignreq: args[4].(bool),
+		endpoint:   args[0].(string),
+		verbose:    args[1].(bool),
+		prettify:   args[2].(bool),
+		logtofile:  args[3].(bool),
+		nosignreq:  args[4].(bool),
+		assumeRole: args[5].(string),
 	}
 }
 
@@ -108,10 +111,14 @@ func (p *proxy) parseEndpoint() error {
 
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
-	if p.credentials == nil {
+	if p.credentials == nil || p.credentials.IsExpired() {
 		sess := session.Must(session.NewSession())
-		credentials := sess.Config.Credentials
-		p.credentials = credentials
+		if p.assumeRole != "" {
+			p.credentials = stscreds.NewCredentials(sess, p.assumeRole)
+		} else {
+			p.credentials = sess.Config.Credentials
+		}
+
 		log.Println("Generated fresh AWS Credentials object")
 	}
 	return v4.NewSigner(p.credentials)
@@ -121,7 +128,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestStarted := time.Now()
 	dump, err := httputil.DumpRequest(r, true)
 	if err != nil {
-		log.Fatalln("error while dumping request. Error: ", err.Error())
+		log.Println("error while dumping request. Error: ", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -134,7 +141,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	req, err := http.NewRequest(r.Method, ep.String(), r.Body)
 	if err != nil {
-		log.Fatalln("error creating new request. ", err.Error())
+		log.Println("error creating new request. ", err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -148,12 +155,18 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
-		signer.Sign(req, payload, p.service, p.region, time.Now())
+		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
+		if err != nil {
+			p.credentials = nil
+			log.Println("Failed to sign", err)
+			http.Error(w, "Failed to sign", http.StatusForbidden)
+			return
+		}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatalln(err.Error())
+		log.Println(err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -162,6 +175,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// AWS credentials expired, need to generate fresh ones
 		if resp.StatusCode == 403 {
 			p.credentials = nil
+			http.Error(w, "Credentials expired", http.StatusForbidden)
 			return
 		}
 	}
@@ -174,11 +188,14 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send response back to requesting client
 	body := bytes.Buffer{}
 	if _, err := io.Copy(&body, resp.Body); err != nil {
-		log.Fatalln(err.Error())
+		log.Println(err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 	w.WriteHeader(resp.StatusCode)
-	w.Write(body.Bytes())
+	_, err = w.Write(body.Bytes())
+	if err != nil {
+		log.Println("Failed to write body", err.Error())
+	}
 
 	requestEnded := time.Since(requestStarted)
 
@@ -296,6 +313,7 @@ func main() {
 		nosignreq     bool
 		endpoint      string
 		listenAddress string
+		assumeRole    string
 		fileRequest   *os.File
 		fileResponse  *os.File
 		err           error
@@ -303,6 +321,7 @@ func main() {
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
 	flag.StringVar(&listenAddress, "listen", "127.0.0.1:9200", "Local TCP port to listen on")
+	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.BoolVar(&verbose, "verbose", false, "Print user requests")
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
@@ -321,6 +340,7 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
+		assumeRole,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
