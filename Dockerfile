@@ -6,12 +6,7 @@ COPY . .
 RUN apk add --update bash curl git && \
     rm /var/cache/apk/*
 
-RUN mkdir -p $$GOPATH/bin && \
-    curl https://glide.sh/get | sh
-
-RUN glide install
 RUN CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy
-
 
 FROM alpine:3.10
 LABEL name="aws-es-proxy" \
@@ -37,6 +32,7 @@ COPY --from=builder /go/src/github.com/abutaha/aws-es-proxy/aws-es-proxy /usr/lo
 
 ENV PORT_NUM 9200
 EXPOSE ${PORT_NUM}
+USER ${USER}
 
 ENTRYPOINT ["aws-es-proxy"] 
 CMD ["-h"]

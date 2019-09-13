@@ -40,18 +40,15 @@ brew install aws-es-proxy
 ### Build from Source
 
 #### Dependencies:
-* go1.5+
-* [glide package manager](https://github.com/Masterminds/glide)
+* go1.11+
 
 
 ```sh
 #requires go1.5
-export GO15VENDOREXPERIMENT=1
 mkdir -p $GOPATH/src/github.com/abutaha
 cd $GOPATH/src/github.com/abutaha
 git clone https://github.com/abutaha/aws-es-proxy
 cd aws-es-proxy
-glide install
 go build github.com/abutaha/aws-es-proxy
 ```
 
