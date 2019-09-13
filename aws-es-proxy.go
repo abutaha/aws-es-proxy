@@ -20,7 +20,7 @@ import (
 	// log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/aws/signer/v4"
+	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	uuid "github.com/satori/go.uuid"
 )
 
