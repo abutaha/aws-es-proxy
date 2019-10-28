@@ -16,7 +16,7 @@ Download the latest [aws-es-proxy release](https://github.com/abutaha/aws-es-pro
 
 ### Docker
 
-There is an official docker image avaiable for aws-es-proxy. To run the image:
+There is an official docker image available for aws-es-proxy. To run the image:
 
 ```sh
 # v0.9 and newer (latest always point to the latest release):
@@ -40,18 +40,10 @@ brew install aws-es-proxy
 ### Build from Source
 
 #### Dependencies:
-* go1.5+
-* [glide package manager](https://github.com/Masterminds/glide)
-
+* go1.11+
 
 ```sh
-#requires go1.5
-export GO15VENDOREXPERIMENT=1
-mkdir -p $GOPATH/src/github.com/abutaha
-cd $GOPATH/src/github.com/abutaha
-git clone https://github.com/abutaha/aws-es-proxy
-cd aws-es-proxy
-glide install
+#requires go1.11
 go build github.com/abutaha/aws-es-proxy
 ```
 
