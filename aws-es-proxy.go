@@ -113,12 +113,16 @@ func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil || p.credentials.IsExpired() {
 		sess := session.Must(session.NewSession())
-		if p.assumeRole != "" {
-			p.credentials = stscreds.NewCredentials(sess, p.assumeRole)
-		} else {
+		if len(p.assumeRole) == 0 {
+			log.Println("Using default credentials")
 			p.credentials = sess.Config.Credentials
+		} else {
+			log.Printf("Assuming credentials from %s", p.assumeRole)
+			p.credentials = stscreds.NewCredentials(sess, p.assumeRole, func(provider *stscreds.AssumeRoleProvider) {
+				provider.Duration = 15 * time.Minute
+				provider.ExpiryWindow = 13 * time.Minute
+			})
 		}
-
 		log.Println("Generated fresh AWS Credentials object")
 	}
 	return v4.NewSigner(p.credentials)
