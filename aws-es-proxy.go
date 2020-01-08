@@ -53,15 +53,21 @@ type proxy struct {
 	fileRequest  *os.File
 	fileResponse *os.File
 	credentials  *credentials.Credentials
+	httpClient   *http.Client
 }
 
 func newProxy(args ...interface{}) *proxy {
+	client := http.Client{
+		Timeout: 15 * time.Second,
+	}
+
 	return &proxy{
 		endpoint:  args[0].(string),
 		verbose:   args[1].(bool),
 		prettify:  args[2].(bool),
 		logtofile: args[3].(bool),
 		nosignreq: args[4].(bool),
+		httpClient: &client,
 	}
 }
 
@@ -151,7 +157,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		signer.Sign(req, payload, p.service, p.region, time.Now())
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		log.Fatalln(err.Error())
 		http.Error(w, err.Error(), http.StatusBadRequest)
