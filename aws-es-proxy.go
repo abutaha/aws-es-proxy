@@ -21,6 +21,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
@@ -196,6 +197,11 @@ func (p *proxy) getSigner() *v4.Signer {
 		}
 
 		credentials := sess.Config.Credentials
+		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
+		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
+			credentials = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+		}
 		p.credentials = credentials
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
