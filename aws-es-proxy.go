@@ -226,7 +226,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if p.logtofile {
 
-		requestID, _ := uuid.NewV4()
+		requestID := uuid.NewV4()
 
 		reqStruct := &requestStruct{
 			Requestid:  requestID.String(),
@@ -329,8 +329,8 @@ func main() {
 	}
 
 	if p.logtofile {
-		u1, _ := uuid.NewV4()
-		u2, _ := uuid.NewV4()
+		u1 := uuid.NewV4()
+		u2 := uuid.NewV4()
 		requestFname := fmt.Sprintf("request-%s.log", u1.String())
 		responseFname := fmt.Sprintf("response-%s.log", u2.String())
 
