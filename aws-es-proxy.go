@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"crypto/tls"
 
 	// log "github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -50,6 +51,7 @@ type proxy struct {
 	prettify     bool
 	logtofile    bool
 	nosignreq    bool
+	nosslcheck	 bool
 	fileRequest  *os.File
 	fileResponse *os.File
 	credentials  *credentials.Credentials
@@ -62,6 +64,9 @@ func newProxy(args ...interface{}) *proxy {
 		prettify:  args[2].(bool),
 		logtofile: args[3].(bool),
 		nosignreq: args[4].(bool),
+		region: 	 args[5].(string),
+		service: 	 args[6].(string),
+		nosslcheck: args[7].(bool),
 	}
 }
 
@@ -87,17 +92,19 @@ func (p *proxy) parseEndpoint() error {
 			p.endpoint)
 	}
 
-	// AWS SignV4 enabled, extract required parts for signing process
-	if !p.nosignreq {
-		// Extract region and service from link
-		parts := strings.Split(link.Host, ".")
+	// We don't want to use the real endpoint, instead a DNS so we can change it easily if we need to.
 
-		if len(parts) == 5 {
-			p.region, p.service = parts[1], parts[2]
-		} else {
-			return fmt.Errorf("error: submitted endpoint is not a valid Amazon ElasticSearch Endpoint")
-		}
-	}
+	// // AWS SignV4 enabled, extract required parts for signing process
+	// if !p.nosignreq {
+	// 	// Extract region and service from link
+	// 	// parts := strings.Split(link.Host, ".")
+	// 	// if len(parts) == 5 {
+	// 	// 	p.region, p.service = parts[1], parts[2]
+	// 	// } else {
+	// 	// 	return fmt.Errorf("error: submitted endpoint is not a valid Amazon ElasticSearch Endpoint")
+	// 	// }
+	//
+	// }
 
 	// Update proxy struct
 	p.scheme = link.Scheme
@@ -149,6 +156,10 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
 		signer.Sign(req, payload, p.service, p.region, time.Now())
+	}
+
+	if p.nosslcheck {
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	resp, err := http.DefaultClient.Do(req)
@@ -296,9 +307,12 @@ func main() {
 		nosignreq     bool
 		endpoint      string
 		listenAddress string
+		region     		string
+		service      	string
 		fileRequest   *os.File
 		fileResponse  *os.File
 		err           error
+		nosslcheck	  bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -307,6 +321,9 @@ func main() {
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
+	flag.BoolVar(&nosslcheck, "no-ssl-check", false, "Disable SSL Checks")
+	flag.StringVar(&region, "region", "eu-west-1", "AWS Region")
+	flag.StringVar(&service, "service", "es", "AWS ES Service")
 	flag.Parse()
 
 	if len(os.Args) < 3 {
@@ -321,6 +338,9 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
+		region,
+		service,
+		nosslcheck,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
