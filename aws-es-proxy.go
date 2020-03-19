@@ -58,7 +58,7 @@ type proxy struct {
 
 func newProxy(args ...interface{}) *proxy {
 	client := http.Client{
-		Timeout: 15 * time.Second,
+		Timeout: args[5].(time.Duration) * time.Second,
 	}
 
 	return &proxy{
@@ -304,6 +304,7 @@ func main() {
 		listenAddress string
 		fileRequest   *os.File
 		fileResponse  *os.File
+		timeout int
 		err           error
 	)
 
@@ -313,6 +314,7 @@ func main() {
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
+	flag.IntVar(&timeout, "timeout", 15, "Set a request timeout to ES. Specify in seconds, defaults to 15")
 	flag.Parse()
 
 	if len(os.Args) < 3 {
@@ -327,6 +329,7 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
+		timeout,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
