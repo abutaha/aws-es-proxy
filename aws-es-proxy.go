@@ -58,7 +58,7 @@ type proxy struct {
 
 func newProxy(args ...interface{}) *proxy {
 	client := http.Client{
-		Timeout: args[5].(time.Duration) * time.Second,
+		Timeout: time.Duration(args[5].(int)) * time.Second,
 	}
 
 	return &proxy{
