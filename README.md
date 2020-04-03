@@ -134,4 +134,4 @@ Usage of ./aws-es-proxy:
 
 After you run *aws-es-proxy*, you can now open your Web browser on [http://localhost:9200](http://localhost:9200). Everything should be working as you have your own instance of ElasticSearch running on port 9200.
 
-To access Kibana, use [http://localhost:9200/_plugin/kibana/](http://localhost:9200/_plugin/kibana/)
+To access Kibana, use [http://localhost:9200/_plugin/kibana/app/kibana](http://localhost:9200/_plugin/kibana/app/kibana)
