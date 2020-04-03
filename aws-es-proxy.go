@@ -93,6 +93,14 @@ func newProxy(args ...interface{}) *proxy {
 	}
 }
 
+var client = &http.Client{
+	CheckRedirect: noRedirect,
+}
+
+func noRedirect(req *http.Request, via []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 func (p *proxy) parseEndpoint() error {
 	var (
 		link          *url.URL
@@ -235,7 +243,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		signer.Sign(req, payload, p.service, p.region, time.Now())
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		logrus.Errorln(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
