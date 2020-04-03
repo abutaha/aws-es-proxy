@@ -67,20 +67,19 @@ type responseStruct struct {
 }
 
 type proxy struct {
-	scheme         string
-	host           string
-	region         string
-	service        string
-	endpoint       string
-	verbose        bool
-	prettify       bool
-	logtofile      bool
-	nosignreq      bool
-	redirectKibana bool
-	fileRequest    *os.File
-	fileResponse   *os.File
-	credentials    *credentials.Credentials
-	httpClient     *http.Client
+	scheme       string
+	host         string
+	region       string
+	service      string
+	endpoint     string
+	verbose      bool
+	prettify     bool
+	logtofile    bool
+	nosignreq    bool
+	fileRequest  *os.File
+	fileResponse *os.File
+	credentials  *credentials.Credentials
+	httpClient   *http.Client
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -90,18 +89,17 @@ func newProxy(args ...interface{}) *proxy {
 	}
 
 	client := http.Client{
-		Timeout:       time.Duration(args[6].(int)) * time.Second,
+		Timeout:       time.Duration(args[5].(int)) * time.Second,
 		CheckRedirect: noRedirect,
 	}
 
 	return &proxy{
-		endpoint:       args[0].(string),
-		verbose:        args[1].(bool),
-		prettify:       args[2].(bool),
-		logtofile:      args[3].(bool),
-		nosignreq:      args[4].(bool),
-		redirectKibana: args[5].(bool),
-		httpClient:     &client,
+		endpoint:   args[0].(string),
+		verbose:    args[1].(bool),
+		prettify:   args[2].(bool),
+		logtofile:  args[3].(bool),
+		nosignreq:  args[4].(bool),
+		httpClient: &client,
 	}
 }
 
@@ -218,17 +216,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxied.Scheme = p.scheme
 	proxied.Path = path.Clean(proxied.Path)
 
-	if proxied.Path == "/_plugin/kibana" {
-		if p.redirectKibana {
-			logrus.Infoln("Redirect kibana enabled.")
-			logrus.Infoln("Changing kibana request from /_plugin/kibana to /_plugin/kibana/app/kibana")
-			proxied.Path = "/_plugin/kibana/app/kibana"
-		} else {
-			logrus.Warnln("Direct access to old Kibana url detected (/_plugin/kibana).")
-			logrus.Warnln("Please run aws-es-proxy with -redirect-kibana option to avoid white pages")
-		}
-	}
-
 	if req, err = http.NewRequest(r.Method, proxied.String(), r.Body); err != nil {
 		logrus.WithError(err).Errorln("Failed creating new request.")
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -269,16 +256,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			logrus.Debugln("Received headers from AWS:", resp.Header)
 			logrus.Debugln("Received body from AWS:", string(b.Bytes()))
-
-			// Print in the browser:
-
-			if proxied.Path == "/_plugin/kibana" {
-				msg := []byte("Received 403 from AWS and /_plugin/kibana path detected. Please run aws-es-proxy with -redirect-kibana option to avoid this issue")
-				w.WriteHeader(resp.StatusCode)
-				w.Write(msg)
-				return
-			}
-			return
 		}
 	}
 
@@ -408,19 +385,18 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		redirectKibana bool
-		debug          bool
-		verbose        bool
-		prettify       bool
-		logtofile      bool
-		nosignreq      bool
-		ver            bool
-		endpoint       string
-		listenAddress  string
-		fileRequest    *os.File
-		fileResponse   *os.File
-		err            error
-		timeout        int
+		debug         bool
+		verbose       bool
+		prettify      bool
+		logtofile     bool
+		nosignreq     bool
+		ver           bool
+		endpoint      string
+		listenAddress string
+		fileRequest   *os.File
+		fileResponse  *os.File
+		err           error
+		timeout       int
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -431,7 +407,6 @@ func main() {
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
 	flag.BoolVar(&debug, "debug", false, "Print debug messages")
 	flag.BoolVar(&ver, "version", false, "Print aws-es-proxy version")
-	flag.BoolVar(&redirectKibana, "redirect-kibana", false, "Redirect direct access to Kibana from /_plugin/kibana to /_plugin/kibana/app/kibana which is the default path in newer versions")
 	flag.IntVar(&timeout, "timeout", 15, "Set a request timeout to ES. Specify in seconds, defaults to 15")
 	flag.Parse()
 
@@ -459,7 +434,6 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
-		redirectKibana,
 		timeout,
 	)
 
