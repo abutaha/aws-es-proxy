@@ -14,15 +14,41 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
-	// log "github.com/Sirupsen/logrus"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/aws/signer/v4"
-	uuid "github.com/satori/go.uuid"
+	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+func logger(debug bool) {
+
+	formatFilePath := func(path string) string {
+		arr := strings.Split(path, "/")
+		return arr[len(arr)-1]
+	}
+
+	if debug {
+		logrus.SetLevel(logrus.DebugLevel)
+		// logrus.SetReportCaller(true)
+	}
+
+	formatter := &logrus.TextFormatter{
+		TimestampFormat:        "2006-02-01 15:04:05",
+		FullTimestamp:          true,
+		DisableLevelTruncation: false,
+		CallerPrettyfier: func(f *runtime.Frame) (string, string) {
+			return "", fmt.Sprintf("%s:%d", formatFilePath(f.File), f.Line)
+		},
+	}
+	logrus.SetFormatter(formatter)
+}
 
 type requestStruct struct {
 	Requestid  string
@@ -41,44 +67,53 @@ type responseStruct struct {
 }
 
 type proxy struct {
-	scheme       string
-	host         string
-	region       string
-	service      string
-	endpoint     string
-	verbose      bool
-	prettify     bool
-	logtofile    bool
-	nosignreq    bool
-	fileRequest  *os.File
-	fileResponse *os.File
-	credentials  *credentials.Credentials
+	scheme         string
+	host           string
+	region         string
+	service        string
+	endpoint       string
+	verbose        bool
+	prettify       bool
+	logtofile      bool
+	nosignreq      bool
+	redirectKibana bool
+	fileRequest    *os.File
+	fileResponse   *os.File
+	credentials    *credentials.Credentials
 }
 
 func newProxy(args ...interface{}) *proxy {
 	return &proxy{
-		endpoint:  args[0].(string),
-		verbose:   args[1].(bool),
-		prettify:  args[2].(bool),
-		logtofile: args[3].(bool),
-		nosignreq: args[4].(bool),
+		endpoint:       args[0].(string),
+		verbose:        args[1].(bool),
+		prettify:       args[2].(bool),
+		logtofile:      args[3].(bool),
+		nosignreq:      args[4].(bool),
+		redirectKibana: args[5].(bool),
 	}
 }
 
 func (p *proxy) parseEndpoint() error {
-	var link *url.URL
-	var err error
+	var (
+		link          *url.URL
+		err           error
+		isAWSEndpoint bool
+	)
 
 	if link, err = url.Parse(p.endpoint); err != nil {
 		return fmt.Errorf("error: failure while parsing endpoint: %s. Error: %s",
 			p.endpoint, err.Error())
 	}
 
-	// Only http/https are supported schemes
+	// Only http/https are supported schemes.
+	// AWS Elasticsearch uses https by default, but now aws-es-proxy
+	// allows non-aws ES clusters as endpoints, therefore we have to fallback
+	// to http instead of https
+
 	switch link.Scheme {
 	case "http", "https":
 	default:
-		link.Scheme = "https"
+		link.Scheme = "http"
 	}
 
 	// Unknown schemes sometimes result in empty host value
@@ -87,21 +122,42 @@ func (p *proxy) parseEndpoint() error {
 			p.endpoint)
 	}
 
-	// AWS SignV4 enabled, extract required parts for signing process
-	if !p.nosignreq {
-		// Extract region and service from link
-		parts := strings.Split(link.Host, ".")
-
-		if len(parts) == 5 || len(parts) == 6 {
-			p.region, p.service = parts[1], parts[2]
-		} else {
-			return fmt.Errorf("error: submitted endpoint is not a valid Amazon ElasticSearch Endpoint")
-		}
-	}
-
 	// Update proxy struct
 	p.scheme = link.Scheme
 	p.host = link.Host
+
+	// AWS SignV4 enabled, extract required parts for signing process
+	if !p.nosignreq {
+
+		split := strings.SplitAfterN(link.Hostname(), ".", 2)
+
+		if len(split) < 2 {
+			logrus.Debugln("Endpoint split is less than 2")
+		}
+
+		awsEndpoints := []string{}
+		for _, partition := range endpoints.DefaultPartitions() {
+			for region := range partition.Regions() {
+				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.es.%s", region, partition.DNSSuffix()))
+			}
+		}
+
+		isAWSEndpoint = false
+		for _, v := range awsEndpoints {
+			if split[1] == v {
+				logrus.Debugln("Provided endpoint is a valid AWS Elasticsearch endpoint")
+				isAWSEndpoint = true
+				break
+			}
+		}
+
+		if isAWSEndpoint {
+			// Extract region and service from link. This should be save now
+			parts := strings.Split(link.Host, ".")
+			p.region, p.service = parts[1], "es"
+			logrus.Debugln("AWS Region", p.region)
+		}
+	}
 
 	return nil
 }
@@ -109,32 +165,60 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-		sess := session.Must(session.NewSession())
+
+		sess, err := session.NewSession(
+			&aws.Config{
+				Region:                        aws.String(p.region),
+				CredentialsChainVerboseErrors: aws.Bool(true),
+			},
+		)
+		if err != nil {
+			logrus.Debugln(err)
+		}
+
 		credentials := sess.Config.Credentials
 		p.credentials = credentials
-		log.Println("Generated fresh AWS Credentials object")
+		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
+
 	return v4.NewSigner(p.credentials)
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestStarted := time.Now()
-	dump, err := httputil.DumpRequest(r, true)
-	if err != nil {
-		log.Fatalln("error while dumping request. Error: ", err.Error())
+
+	var (
+		err  error
+		dump []byte
+		req  *http.Request
+	)
+
+	if dump, err = httputil.DumpRequest(r, true); err != nil {
+		logrus.WithError(err).Errorln("Failed to dump request.")
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	defer r.Body.Close()
 
-	ep := *r.URL
-	ep.Host = p.host
-	ep.Scheme = p.scheme
-	ep.Path = path.Clean(ep.Path)
+	proxied := *r.URL
+	proxied.Host = p.host
+	proxied.Scheme = p.scheme
+	proxied.Path = path.Clean(proxied.Path)
 
-	req, err := http.NewRequest(r.Method, ep.String(), r.Body)
-	if err != nil {
-		log.Fatalln("error creating new request. ", err.Error())
+	if proxied.Path == "/_plugin/kibana" {
+		if p.redirectKibana {
+			logrus.Infoln("Redirect kibana enabled.")
+			logrus.Infoln("Changing kibana request from /_plugin/kibana to /_plugin/kibana/app/kibana")
+			proxied.Path = "/_plugin/kibana/app/kibana"
+		} else {
+			logrus.Warnln("Direct access to old Kibana url detected (/_plugin/kibana).")
+			logrus.Warnln("Please run aws-es-proxy with -redirect-kibana option to avoid white pages")
+		}
+	}
+
+	if req, err = http.NewRequest(r.Method, proxied.String(), r.Body); err != nil {
+		logrus.WithError(err).Errorln("Failed creating new request.")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -153,7 +237,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Fatalln(err.Error())
+		logrus.Errorln(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -161,7 +245,27 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !p.nosignreq {
 		// AWS credentials expired, need to generate fresh ones
 		if resp.StatusCode == 403 {
+			logrus.Errorln("Received 403 from AWSAuth, invalidating credentials for retrial")
 			p.credentials = nil
+
+			logrus.Debugln("Received Status code from AWS:", resp.StatusCode)
+			b := bytes.Buffer{}
+			if _, err := io.Copy(&b, resp.Body); err != nil {
+				logrus.WithError(err).Errorln("Failed to decode body")
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			logrus.Debugln("Received headers from AWS:", resp.Header)
+			logrus.Debugln("Received body from AWS:", string(b.Bytes()))
+
+			// Print in the browser:
+
+			if proxied.Path == "/_plugin/kibana" {
+				msg := []byte("Received 403 from AWS and /_plugin/kibana path detected. Please run aws-es-proxy with -redirect-kibana option to avoid this issue")
+				w.WriteHeader(resp.StatusCode)
+				w.Write(msg)
+				return
+			}
 			return
 		}
 	}
@@ -174,9 +278,11 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Send response back to requesting client
 	body := bytes.Buffer{}
 	if _, err := io.Copy(&body, resp.Body); err != nil {
-		log.Fatalln(err.Error())
+		logrus.Errorln(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
+
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body.Bytes())
 
@@ -210,7 +316,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("========================")
 			fmt.Println(t.Format("2006/01/02 15:04:05"))
 			fmt.Println("Remote Address: ", r.RemoteAddr)
-			fmt.Println("Request URI: ", ep.RequestURI())
+			fmt.Println("Request URI: ", proxied.RequestURI())
 			fmt.Println("Method: ", r.Method)
 			fmt.Println("Status: ", resp.StatusCode)
 			fmt.Printf("Took: %.3fs\n", requestEnded.Seconds())
@@ -219,20 +325,20 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf(" -> %s; %s; %s; %s; %d; %.3fs\n",
 				r.Method, r.RemoteAddr,
-				ep.RequestURI(), query,
+				proxied.RequestURI(), query,
 				resp.StatusCode, requestEnded.Seconds())
 		}
 	}
 
 	if p.logtofile {
 
-		requestID := uuid.NewV4()
+		requestID := primitive.NewObjectID().Hex()
 
 		reqStruct := &requestStruct{
-			Requestid:  requestID.String(),
+			Requestid:  requestID,
 			Datetime:   time.Now().Format("2006/01/02 15:04:05"),
 			Remoteaddr: r.RemoteAddr,
-			Requesturi: ep.RequestURI(),
+			Requesturi: proxied.RequestURI(),
 			Method:     r.Method,
 			Statuscode: resp.StatusCode,
 			Elapsed:    requestEnded.Seconds(),
@@ -240,7 +346,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		respStruct := &responseStruct{
-			Requestid: requestID.String(),
+			Requestid: requestID,
 			Body:      string(body.Bytes()),
 		}
 
@@ -290,15 +396,18 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		verbose       bool
-		prettify      bool
-		logtofile     bool
-		nosignreq     bool
-		endpoint      string
-		listenAddress string
-		fileRequest   *os.File
-		fileResponse  *os.File
-		err           error
+		redirectKibana bool
+		debug          bool
+		verbose        bool
+		prettify       bool
+		logtofile      bool
+		nosignreq      bool
+		ver            bool
+		endpoint       string
+		listenAddress  string
+		fileRequest    *os.File
+		fileResponse   *os.File
+		err            error
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -307,12 +416,28 @@ func main() {
 	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
+	flag.BoolVar(&debug, "debug", false, "Print debug messages")
+	flag.BoolVar(&ver, "version", false, "Print aws-es-proxy version")
+	flag.BoolVar(&redirectKibana, "redirect-kibana", false, "Redirect direct access to Kibana from /_plugin/kibana to /_plugin/kibana/app/kibana which is the default path in newer versions")
+
 	flag.Parse()
 
-	if len(os.Args) < 3 {
+	if len(os.Args) < 2 {
 		fmt.Println("You need to specify Amazon ElasticSearch endpoint.")
 		fmt.Println("Please run with '-h' for a list of available arguments.")
 		os.Exit(1)
+	}
+
+	if debug {
+		logger(true)
+	} else {
+		logger(false)
+	}
+
+	if ver {
+		version := 1.0
+		logrus.Infof("Current version is: v%.1f", version)
+		os.Exit(0)
 	}
 
 	p := newProxy(
@@ -321,27 +446,26 @@ func main() {
 		prettify,
 		logtofile,
 		nosignreq,
+		redirectKibana,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
-		log.Fatalln(err)
+		logrus.Fatalln(err)
 		os.Exit(1)
 	}
 
 	if p.logtofile {
-		u1 := uuid.NewV4()
-		u2 := uuid.NewV4()
-		requestFname := fmt.Sprintf("request-%s.log", u1.String())
-		responseFname := fmt.Sprintf("response-%s.log", u2.String())
 
+		requestFname := fmt.Sprintf("request-%s.log", primitive.NewObjectID().Hex())
 		if fileRequest, err = os.Create(requestFname); err != nil {
 			log.Fatalln(err.Error())
 		}
+		defer fileRequest.Close()
+
+		responseFname := fmt.Sprintf("response-%s.log", primitive.NewObjectID().Hex())
 		if fileResponse, err = os.Create(responseFname); err != nil {
 			log.Fatalln(err.Error())
 		}
-
-		defer fileRequest.Close()
 		defer fileResponse.Close()
 
 		p.fileRequest = fileRequest
@@ -349,6 +473,6 @@ func main() {
 
 	}
 
-	log.Printf("Listening on %s...\n", listenAddress)
-	log.Fatal(http.ListenAndServe(listenAddress, p))
+	logrus.Infof("Listening on %s...\n", listenAddress)
+	logrus.Fatalln(http.ListenAndServe(listenAddress, p))
 }
