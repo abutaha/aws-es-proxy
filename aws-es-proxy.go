@@ -80,9 +80,20 @@ type proxy struct {
 	fileRequest    *os.File
 	fileResponse   *os.File
 	credentials    *credentials.Credentials
+	httpClient     *http.Client
 }
 
 func newProxy(args ...interface{}) *proxy {
+
+	noRedirect := func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	client := http.Client{
+		Timeout:       time.Duration(args[6].(int)) * time.Second,
+		CheckRedirect: noRedirect,
+	}
+
 	return &proxy{
 		endpoint:       args[0].(string),
 		verbose:        args[1].(bool),
@@ -90,15 +101,8 @@ func newProxy(args ...interface{}) *proxy {
 		logtofile:      args[3].(bool),
 		nosignreq:      args[4].(bool),
 		redirectKibana: args[5].(bool),
+		httpClient:     &client,
 	}
-}
-
-var client = &http.Client{
-	CheckRedirect: noRedirect,
-}
-
-func noRedirect(req *http.Request, via []*http.Request) error {
-	return http.ErrUseLastResponse
 }
 
 func (p *proxy) parseEndpoint() error {
@@ -243,7 +247,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		signer.Sign(req, payload, p.service, p.region, time.Now())
 	}
 
-	resp, err := client.Do(req)
+	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		logrus.Errorln(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -416,6 +420,7 @@ func main() {
 		fileRequest    *os.File
 		fileResponse   *os.File
 		err            error
+		timeout        int
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -427,7 +432,7 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "Print debug messages")
 	flag.BoolVar(&ver, "version", false, "Print aws-es-proxy version")
 	flag.BoolVar(&redirectKibana, "redirect-kibana", false, "Redirect direct access to Kibana from /_plugin/kibana to /_plugin/kibana/app/kibana which is the default path in newer versions")
-
+	flag.IntVar(&timeout, "timeout", 15, "Set a request timeout to ES. Specify in seconds, defaults to 15")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -455,6 +460,7 @@ func main() {
 		logtofile,
 		nosignreq,
 		redirectKibana,
+		timeout,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
