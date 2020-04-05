@@ -21,7 +21,7 @@ There is an official docker image available for aws-es-proxy. To run the image:
 ```sh
 # v0.9 and newer (latest always point to the latest release):
 
-docker run --rm -it abutaha/aws-es-proxy:0.9 -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com
+docker run --rm -v ~/.aws:/root/.aws -p 9200:9200 abutaha/aws-es-proxy:v1.0 -endpoint https://dummy-host.ap-southeast-2.es.amazonaws.com -listen 0.0.0.0:9200
 
 v.08:
 
