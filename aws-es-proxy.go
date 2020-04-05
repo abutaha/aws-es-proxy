@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -80,6 +81,10 @@ type proxy struct {
 	fileResponse *os.File
 	credentials  *credentials.Credentials
 	httpClient   *http.Client
+	auth         bool
+	username     string
+	password     string
+	realm        string
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -100,6 +105,10 @@ func newProxy(args ...interface{}) *proxy {
 		logtofile:  args[3].(bool),
 		nosignreq:  args[4].(bool),
 		httpClient: &client,
+		auth:       args[6].(bool),
+		username:   args[7].(string),
+		password:   args[8].(string),
+		realm:      args[9].(string),
 	}
 }
 
@@ -195,6 +204,18 @@ func (p *proxy) getSigner() *v4.Signer {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+
+	if p.auth {
+		user, pass, ok := r.BasicAuth()
+
+		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(p.username)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(p.password)) != 1 {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", p.realm))
+			w.WriteHeader(401)
+			_, _ = w.Write([]byte("Unauthorised.\n"))
+			return
+		}
+	}
+
 	requestStarted := time.Now()
 
 	var (
@@ -376,9 +397,12 @@ func replaceBody(req *http.Request) []byte {
 
 func copyHeaders(dst, src http.Header) {
 	for k, vals := range src {
-		for _, v := range vals {
-			dst.Add(k, v)
+		if k != "Authorization" {
+			for _, v := range vals {
+				dst.Add(k, v)
+			}
 		}
+
 	}
 }
 
@@ -386,6 +410,10 @@ func main() {
 
 	var (
 		debug         bool
+		auth          bool
+		username      string
+		password      string
+		realm         string
 		verbose       bool
 		prettify      bool
 		logtofile     bool
@@ -408,6 +436,10 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "Print debug messages")
 	flag.BoolVar(&ver, "version", false, "Print aws-es-proxy version")
 	flag.IntVar(&timeout, "timeout", 15, "Set a request timeout to ES. Specify in seconds, defaults to 15")
+	flag.BoolVar(&auth, "auth", false, "Require HTTP Basic Auth")
+	flag.StringVar(&username, "username", "", "HTTP Basic Auth Username")
+	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
+	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -428,6 +460,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	if auth {
+		if len(username) == 0 || len(password) == 0 {
+			fmt.Println("You need to specify username and password when using authentication.")
+			fmt.Println("Please run with '-h' for a list of available arguments.")
+			os.Exit(1)
+		}
+	}
+
 	p := newProxy(
 		endpoint,
 		verbose,
@@ -435,6 +475,10 @@ func main() {
 		logtofile,
 		nosignreq,
 		timeout,
+		auth,
+		username,
+		password,
+		realm,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
