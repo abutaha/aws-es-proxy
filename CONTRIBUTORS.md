@@ -1,0 +1,27 @@
+To those who spent some of their precious time and submitted patches and pull requests, I say THANK YOU!
+
+https://github.com/mkadin
+https://github.com/msusta
+https://github.com/gabrielsoltz
+https://github.com/shenyute
+https://github.com/dippynark
+https://github.com/nouse
+https://github.com/guusvw
+https://github.com/asherf
+https://github.com/joshgarnett
+https://github.com/kamushadenes
+https://github.com/discordianfish
+https://github.com/johnkchiu
+https://github.com/gjacquet
+https://github.com/tedder
+https://github.com/bossyan
+https://github.com/buzztaiki
+https://github.com/dsanders11
+https://github.com/rbnmanni
+https://github.com/dlackty
+https://github.com/willejs
+https://github.com/diranged
+https://github.com/em0ney
+https://github.com/zqben402
+https://github.com/dlackty
+
