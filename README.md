@@ -40,10 +40,10 @@ brew install aws-es-proxy
 ### Build from Source
 
 #### Dependencies:
-* go1.11+
+* go1.14+
 
 ```sh
-#requires go1.11
+#requires go1.14
 go build github.com/abutaha/aws-es-proxy
 ```
 
