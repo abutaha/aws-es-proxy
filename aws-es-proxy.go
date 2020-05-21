@@ -206,8 +206,13 @@ func (p *proxy) getSigner() *v4.Signer {
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path == "/stop" {
-		logrus.Info("Received /stop command")
-		os.Exit(0)
+		w.WriteHeader(http.StatusOK)
+		go func() {
+			logrus.Info("Received /stop command. Stopping in 2 sec")
+			time.Sleep(2 * time.Second)
+			os.Exit(0)
+		}()
+		return
 	}
 
 	if p.auth {
