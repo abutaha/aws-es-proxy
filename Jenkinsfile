@@ -37,12 +37,16 @@ pipeline {
                 }
             }
 
-            steps {
-                container('docker') {
-                    script {
-                        docker.withRegistry("https://${DOCKER_REPOSITORY}", 'ecr:eu-west-1:ecr-credentials') {
-                            sh "docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
-                            sh "docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+            stages {
+                stage("Push Image") {
+                    steps {
+                        container('docker') {
+                            script {
+                                docker.withRegistry("https://${DOCKER_REPOSITORY}", 'ecr:eu-west-1:ecr-credentials') {
+                                    sh "docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+                                    sh "docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+                                }
+                            }
                         }
                     }
                 }
