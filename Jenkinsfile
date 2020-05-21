@@ -20,50 +20,11 @@ pipeline {
     }
 
     stages {
-
-        stage("Docker Build") {
+        stage("Build") {
             steps {
                 container('docker') {
                     sh "docker build -t aws-es-proxy:${env.DOCKER_TAG} ./aws-es-proxy/"
                 }
-            }
-        }
-
-        stage('Push') {
-            when {
-                anyOf {
-                    buildingTag()
-                    branch "master"
-                }
-            }
-
-            stages {
-                stage("Push Image") {
-                    steps {
-                        container('docker') {
-                            script {
-                                docker.withRegistry("https://${DOCKER_REPOSITORY}", 'ecr:eu-west-1:ecr-credentials') {
-                                    sh "docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
-                                    sh "docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        success {
-            container("notifications") {
-                sh "slack-succeed '${env.SLACK_CHANNEL}'"
-            }
-        }
-
-        failure {
-            container("notifications") {
-                sh "slack-failed '${env.SLACK_CHANNEL}'"
             }
         }
     }
