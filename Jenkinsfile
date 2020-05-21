@@ -23,7 +23,7 @@ pipeline {
         stage("Build") {
             steps {
                 container('docker') {
-                    sh "docker build -t aws-es-proxy:${env.DOCKER_TAG} ./aws-es-proxy/"
+                    sh "docker build -t aws-es-proxy:${env.DOCKER_TAG} ."
                 }
             }
         }
