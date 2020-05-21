@@ -20,10 +20,39 @@ pipeline {
     }
 
     stages {
+
+        stage("Build") {
+            steps {
+                container('go') {
+                    sh "CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy"
+                }
+            }
+        }
+
         stage("Build") {
             steps {
                 container('docker') {
                     sh "docker build -t aws-es-proxy:${env.DOCKER_TAG} ."
+                }
+            }
+        }
+
+        stage("Push") {
+            when {
+                anyOf {
+                    buildingTag()
+                    branch "master"
+                }
+            }
+
+            steps {
+                container('docker') {
+                    script {
+                        docker.withRegistry("https://${DOCKER_REPOSITORY}", 'ecr:eu-west-1:ecr-credentials') {
+                            sh "docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+                            sh "docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+                        }
+                    }
                 }
             }
         }

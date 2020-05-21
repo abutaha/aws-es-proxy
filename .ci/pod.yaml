@@ -5,6 +5,10 @@ metadata:
     iam.amazonaws.com/role: "KubernetesJenkinsAgent"
 spec:
   containers:
+    - name: go
+      image: "golang:1.14-alpine"
+      command: ["cat"]
+      tty: true
     - name: docker
       image: docker
       command: ["cat"]
