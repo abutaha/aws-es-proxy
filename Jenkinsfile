@@ -21,7 +21,7 @@ pipeline {
 
     stages {
 
-        stage("Build") {
+        stage("GO Build") {
             steps {
                 container('go') {
                     sh "CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy"
