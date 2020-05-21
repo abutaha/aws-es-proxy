@@ -2,7 +2,6 @@ FROM alpine:3.11
 LABEL name="aws-es-proxy" \
       version="latest"
 
-RUN apk --no-cache add ca-certificates
 WORKDIR /home/
 COPY aws-es-proxy /usr/local/bin/
 
