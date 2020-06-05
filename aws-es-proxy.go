@@ -458,8 +458,8 @@ func main() {
 			endpoint = v
 		} else {
 			text := "You need to specify Amazon ElasticSearch endpoint.\n" +
-        "You can use either argument '-endpoint' OR environment variable 'ENDPOINT'.\n" +
-        "Please run with '-h' for a list of available arguments."
+				"You can use either argument '-endpoint' OR environment variable 'ENDPOINT'.\n" +
+				"Please run with '-h' for a list of available arguments."
 			fmt.Println(text)
 			os.Exit(1)
 		}
@@ -472,7 +472,7 @@ func main() {
 	}
 
 	if ver {
-		version := 1.0
+		version := 1.1
 		logrus.Infof("Current version is: v%.1f", version)
 		os.Exit(0)
 	}
