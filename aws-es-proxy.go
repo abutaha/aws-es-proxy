@@ -447,10 +447,16 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.Parse()
 
-	if len(os.Args) < 2 {
-		fmt.Println("You need to specify Amazon ElasticSearch endpoint.")
-		fmt.Println("Please run with '-h' for a list of available arguments.")
-		os.Exit(1)
+	if endpoint == "" {
+		if v, ok := os.LookupEnv(strings.ToUpper("endpoint")); ok {
+			endpoint = v
+		} else {
+			text := "You need to specify Amazon ElasticSearch endpoint.\n" +
+        "You can use either argument '-endpoint' OR environment variable 'ENDPOINT'.\n" +
+        "Please run with '-h' for a list of available arguments."
+			fmt.Println(text)
+			os.Exit(1)
+		}
 	}
 
 	if debug {

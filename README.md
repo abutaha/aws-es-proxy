@@ -86,9 +86,18 @@ export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
 
 ## Usage example:
 
+You can use either argument `-endpoint` OR environment variable `ENDPOINT` to specify AWS ElasticSearch endpoint.
+
 ```sh
 ./aws-es-proxy -endpoint https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
 Listening on 127.0.0.1:9200
+```
+
+```sh
+export ENDPOINT=https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
+
+./aws-es-proxy  -listen 10.0.0.1:9200 -verbose
+Listening on 10.0.0.1:9200
 ```
 
 *aws-es-proxy* listens on 127.0.0.1:9200 if no additional argument is provided. You can change the IP and Port passing the argument `-listen`
