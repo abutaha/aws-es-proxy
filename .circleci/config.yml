@@ -16,7 +16,7 @@ version: 2.1
     branches:
       ignore: '/.*/'
     tags:
-      only: '/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\+(prod))$/'
+      only: '/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
 
 .container_executor: &container_executor
    docker:
