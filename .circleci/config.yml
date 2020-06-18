@@ -6,20 +6,20 @@ version: 2.1
     steps:
     - checkout:
         path: ~/workspace
+    - restore_cache:
+        key: v1-build-stage-{{ .Environment.CIRCLE_SHA1 }}
+    - restore_cache:
+          key: v1-envs-{{ .Environment.CIRCLE_WORKFLOW_ID }}{{ .Environment.CIRCLE_SHA1 }}
     - run:
-        name: ecr_auth_push
+        name: Deployment
         command: |
-          pip install --user awscli
-          export PATH="$(python -m site --user-base)/bin:${PATH}"
           bash ~/workspace/.circleci/deploy.sh
 
-.only-prod-tag: &only-prod-tag
+.deploy_branches: &deploy_branches
   filters:
     branches:
       only:
         - master
-    tags:
-      only: '/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
 
 .container_executor: &container_executor
    docker:
@@ -28,23 +28,84 @@ version: 2.1
 .directory: &directory
    working_directory: ~/workspace
 
+orbs:
+  clair_scanner: yaradigitallabs/clair-scanner@0.0.11
+
 jobs:
   checkout-code:
     <<: *container_executor
     <<: *directory
     steps:
       - checkout
+      - save_cache:
+          key: v1-repo-{{ .Environment.CIRCLE_WORKFLOW_ID }}-{{ .Environment.CIRCLE_SHA1 }}
+          paths: ~/workspace
 
-  deploy:
-    <<: *deploy
+  build-image:
+    <<: *container_executor
+    <<: *directory
+    steps:
+      - setup_remote_docker
+      - restore_cache:
+          keys:
+          - v1-repo-{{ .Environment.CIRCLE_WORKFLOW_ID }}-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          keys:
+          - v1-dependencies-{{ .Environment.CIRCLE_SHA1 }}
+      - run:
+          name: docker_build
+          command: |
+            bash ~/workspace/.circleci/docker_build.sh
+      - save_cache:
+          key: v1-docker-cache-{{ .Environment.CIRCLE_WORKFLOW_ID }}{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - ~/workspace/docker-cache
+
+  scan-image:
+    executor: clair_scanner/default
+    steps:
+      - restore_cache:
+          key: v1-docker-cache-{{ .Environment.CIRCLE_WORKFLOW_ID }}{{ .Environment.CIRCLE_SHA1 }}
+
+      - clair_scanner/scan:
+          image_file: /home/circleci/workspace/docker-cache/built-image.tar
+
+  push-image:
+    <<: *container_executor
+    <<: *directory
+    steps:
+      - setup_remote_docker
+      - restore_cache:
+          keys:
+          - v1-repo-{{ .Environment.CIRCLE_WORKFLOW_ID }}-{{ .Environment.CIRCLE_SHA1 }}
+      - restore_cache:
+          key: v1-docker-cache-{{ .Environment.CIRCLE_WORKFLOW_ID }}{{ .Environment.CIRCLE_SHA1 }}
+      - run:
+          name: docker_build
+          command: |
+            bash ~/workspace/.circleci/docker_push.sh
 
 workflows:
   version: 2
-  pipeline:
+  ms_pipeline:
     jobs:
     - checkout-code
-    - deploy:
-        context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
-        <<: *only-prod-tag
+    - bundle-dependencies:
         requires:
           - checkout-code
+    - build-image:
+        context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
+        <<: *deploy_branches
+        requires:
+          - bundle-dependencies
+    - scan-image:
+        context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
+        <<: *deploy_branches
+        requires:
+          - build-image
+    - push-image:
+        context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
+        <<: *deploy_branches
+        requires:
+          - build-image
+          - scan-image
