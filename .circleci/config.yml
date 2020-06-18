@@ -9,7 +9,9 @@ version: 2.1
     - run:
         name: ecr_auth_push
         command: |
-          bash ~/workspace/.circleci/get_auth_ecr.sh
+          pip install --user awscli
+          export PATH="$(python -m site --user-base)/bin:${PATH}"
+          bash ~/workspace/.circleci/deploy.sh
 
 .only-prod-tag: &only-prod-tag
   filters:
