@@ -20,6 +20,8 @@ version: 2.1
     branches:
       only:
         - master
+    tags:
+      only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
 
 .container_executor: &container_executor
    docker:
