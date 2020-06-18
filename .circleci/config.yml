@@ -15,14 +15,6 @@ version: 2.1
         command: |
           bash ~/workspace/.circleci/deploy.sh
 
-.deploy_branches: &deploy_branches
-  filters:
-    branches:
-      only:
-        - master
-    tags:
-      only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
-
 .container_executor: &container_executor
    docker:
      - image: circleci/python:3.6.1
@@ -89,22 +81,26 @@ jobs:
 
 workflows:
   version: 2
-  ms_pipeline:
+  pipeline:
     jobs:
     - checkout-code
     - build-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
-        <<: *deploy_branches
+        filters:
+          branches:
+            only:
+              - master
+              - /.*-rc[0-9]{1,2}$/
+          tags:
+            only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
         requires:
           - checkout-code
     - scan-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
-        <<: *deploy_branches
         requires:
           - build-image
     - push-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
-        <<: *deploy_branches
         requires:
           - build-image
           - scan-image
