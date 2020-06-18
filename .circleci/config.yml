@@ -90,14 +90,11 @@ workflows:
   ms_pipeline:
     jobs:
     - checkout-code
-    - bundle-dependencies:
-        requires:
-          - checkout-code
     - build-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
         <<: *deploy_branches
         requires:
-          - bundle-dependencies
+          - checkout-code
     - scan-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
         <<: *deploy_branches
