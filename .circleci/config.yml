@@ -83,7 +83,14 @@ workflows:
   version: 2
   pipeline:
     jobs:
-    - checkout-code
+    - checkout-code:
+        filters:
+          branches:
+            only:
+              - master
+              - /.*-rc[0-9]{1,2}$/
+          tags:
+            only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
     - build-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
         filters:
@@ -99,8 +106,22 @@ workflows:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
         requires:
           - build-image
+        filters:
+          branches:
+            only:
+              - master
+              - /.*-rc[0-9]{1,2}$/
+          tags:
+            only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
     - push-image:
         context: CIRCLE_CI_AWS_IAM_EMEA_EKS_STAGE
         requires:
           - build-image
           - scan-image
+        filters:
+          branches:
+            only:
+              - master
+              - /.*-rc[0-9]{1,2}$/
+          tags:
+            only: /^v[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}$/
