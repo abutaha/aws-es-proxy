@@ -14,7 +14,8 @@ version: 2.1
 .only-prod-tag: &only-prod-tag
   filters:
     branches:
-      ignore: '/.*/'
+      only:
+        - master
     tags:
       only: '/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/'
 
