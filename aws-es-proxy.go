@@ -391,6 +391,10 @@ func addHeaders(src, dest http.Header) {
 		dest.Add("Content-Type", val[0])
 	}
 
+	if val, ok := src["Accept"]; ok {
+		dest.Add("Accept", val[0])
+	}
+
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
 	}
