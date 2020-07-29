@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"encoding/base64"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -86,6 +87,10 @@ type proxy struct {
 	username     string
 	password     string
 	realm        string
+}
+
+type jwt_header struct {
+	Email       string    `json:"email"`
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -339,8 +344,18 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("Body: ")
 			fmt.Println(string(prettyBody.Bytes()))
 		} else {
-			log.Printf(" -> %s; %s; %s; %s; %d; %.3fs\n",
-				r.Method, r.RemoteAddr,
+			encoded_header := r.Header.Get("X-Amzn-Oidc-Data")
+			var jwtHeader jwt_header
+
+			if encoded_header != "" {
+				encoded_header_payload := strings.Split(encoded_header, ".")
+				// the payload is in the middle
+				jwt_header_bytes, _ := base64.StdEncoding.DecodeString(encoded_header_payload[1])
+				_ = json.Unmarshal(jwt_header_bytes, &jwtHeader)
+			}
+
+			log.Printf(" %s -> %s; %s; %s; %s; %d; %.3fs\n",
+			    jwtHeader.Email, r.Method, r.RemoteAddr,
 				proxied.RequestURI(), query,
 				resp.StatusCode, requestEnded.Seconds())
 		}
