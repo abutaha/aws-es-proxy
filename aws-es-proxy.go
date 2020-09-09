@@ -86,6 +86,7 @@ type proxy struct {
 	username     string
 	password     string
 	realm        string
+	assumeRole   string
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -110,6 +111,7 @@ func newProxy(args ...interface{}) *proxy {
 		username:   args[7].(string),
 		password:   args[8].(string),
 		realm:      args[9].(string),
+		assumeRole: args[10].(string),
 	}
 }
 
@@ -196,13 +198,26 @@ func (p *proxy) getSigner() *v4.Signer {
 			logrus.Debugln(err)
 		}
 
-		credentials := sess.Config.Credentials
 		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
 		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+
+		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
-			credentials = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
+			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+		} else if p.assumeRole != "" {
+			logrus.Infof("Assuming credentials from %s", p.assumeRole)
+			creds = stscreds.NewCredentials(sess, p.assumeRole, func(provider *stscreds.AssumeRoleProvider) {
+				provider.Duration = 17 * time.Minute
+				provider.ExpiryWindow = 13 * time.Minute
+				provider.MaxJitterFrac = 0.1
+			})
+		} else {
+			logrus.Infoln("Using default credentials")
+			creds = sess.Config.Credentials
 		}
-		p.credentials = credentials
+
+		p.credentials = creds
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
 
@@ -258,7 +273,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
-		signer.Sign(req, payload, p.service, p.region, time.Now())
+		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
+		if err != nil {
+			p.credentials = nil
+			logrus.Errorln("Failed to sign", err)
+			http.Error(w, "Failed to sign", http.StatusForbidden)
+			return
+		}
 	}
 
 	resp, err := p.httpClient.Do(req)
@@ -425,6 +446,7 @@ func main() {
 		username      string
 		password      string
 		realm         string
+		assumeRole    string
 		verbose       bool
 		prettify      bool
 		logtofile     bool
@@ -451,6 +473,7 @@ func main() {
 	flag.StringVar(&username, "username", "", "HTTP Basic Auth Username")
 	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
+	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -496,6 +519,7 @@ func main() {
 		username,
 		password,
 		realm,
+		assumeRole,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
