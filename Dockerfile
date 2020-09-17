@@ -9,7 +9,9 @@ FROM alpine:3.11
 LABEL name="aws-es-proxy" \
       version="latest"
 
+RUN addgroup -S app && adduser -S -G app app
 RUN apk --no-cache add ca-certificates
+USER app
 WORKDIR /home/
 COPY --from=0 /go/src/github.com/abutaha/aws-es-proxy/aws-es-proxy /usr/local/bin/
 
