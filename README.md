@@ -124,6 +124,10 @@ For a full list of available options, use `-h`:
 ```sh
 ./aws-es-proxy -h
 Usage of ./aws-es-proxy:
+  -auth
+        Require HTTP Basic Auth
+  -debug
+        Print debug messages
   -endpoint string
         Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)
   -listen string
@@ -132,10 +136,22 @@ Usage of ./aws-es-proxy:
         Log user requests and ElasticSearch responses to files
   -no-sign-reqs
         Disable AWS Signature v4
+  -password string
+        HTTP Basic Auth Password
   -pretty
         Prettify verbose and file output
+  -realm string
+        Authentication Required
+  -remote-terminate
+        Allow HTTP remote termination
+  -timeout int
+        Set a request timeout to ES. Specify in seconds, defaults to 15 (default 15)
+  -username string
+        HTTP Basic Auth Username
   -verbose
         Print user requests
+  -version
+        Print aws-es-proxy version
 ```
 
 
