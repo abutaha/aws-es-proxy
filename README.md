@@ -40,7 +40,8 @@ brew install aws-es-proxy
 ### Build from Source
 
 #### Dependencies:
-* go1.14+
+
+- go1.14+
 
 ```sh
 #requires go1.14
@@ -82,8 +83,6 @@ export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
 }
 ```
 
-
-
 ## Usage example:
 
 You can use either argument `-endpoint` OR environment variable `ENDPOINT` to specify AWS ElasticSearch endpoint.
@@ -100,14 +99,14 @@ export ENDPOINT=https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
 Listening on 10.0.0.1:9200
 ```
 
-*aws-es-proxy* listens on 127.0.0.1:9200 if no additional argument is provided. You can change the IP and Port passing the argument `-listen`
+_aws-es-proxy_ listens on 127.0.0.1:9200 if no additional argument is provided. You can change the IP and Port passing the argument `-listen`
 
 ```sh
 ./aws-es-proxy -listen :8080 -endpoint ...
 ./aws-es-proxy -listen 10.0.0.1:9200 -endpoint ...
 ```
 
-By default, *aws-es-proxy* will not display any message in the console. However, it has the ability to print requests being sent to Amazon Elasticsearch, and the duration it takes to receive the request back. This can be enabled using the option `-verbose`
+By default, _aws-es-proxy_ will not display any message in the console. However, it has the ability to print requests being sent to Amazon Elasticsearch, and the duration it takes to receive the request back. This can be enabled using the option `-verbose`
 
 ```sh
 ./aws-es-proxy -verbose ...
@@ -124,6 +123,10 @@ For a full list of available options, use `-h`:
 ```sh
 ./aws-es-proxy -h
 Usage of ./aws-es-proxy:
+  -auth
+        Require HTTP Basic Auth
+  -debug
+        Print debug messages
   -endpoint string
         Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)
   -listen string
@@ -132,15 +135,30 @@ Usage of ./aws-es-proxy:
         Log user requests and ElasticSearch responses to files
   -no-sign-reqs
         Disable AWS Signature v4
+  -password string
+        HTTP Basic Auth Password
   -pretty
         Prettify verbose and file output
+  -realm string
+        Authentication Required
+  -remote-terminate
+        Allow HTTP remote termination
+  -timeout int
+        Set a request timeout to ES. Specify in seconds, defaults to 15 (default 15)
+  -username string
+        HTTP Basic Auth Username
   -verbose
         Print user requests
+  -version
+        Print aws-es-proxy version
+  -region
+        AWS region (ex. us-west-2) (Required)
+  -insecure
+        Will not verify SSL (default false)
 ```
-
 
 ## Using HTTP Clients
 
-After you run *aws-es-proxy*, you can now open your Web browser on [http://localhost:9200](http://localhost:9200). Everything should be working as you have your own instance of ElasticSearch running on port 9200.
+After you run _aws-es-proxy_, you can now open your Web browser on [http://localhost:9200](http://localhost:9200). Everything should be working as you have your own instance of ElasticSearch running on port 9200.
 
-To access Kibana, use [http://localhost:9200/_plugin/kibana/app/kibana](http://localhost:9200/_plugin/kibana/app/kibana)
+To access Kibana, use [http://localhost:9200/\_plugin/kibana/app/kibana](http://localhost:9200/_plugin/kibana/app/kibana)

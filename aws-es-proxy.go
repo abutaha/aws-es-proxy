@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,7 +23,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/sirupsen/logrus"
@@ -69,23 +69,25 @@ type responseStruct struct {
 }
 
 type proxy struct {
-	scheme       string
-	host         string
-	region       string
-	service      string
-	endpoint     string
-	verbose      bool
-	prettify     bool
-	logtofile    bool
-	nosignreq    bool
-	fileRequest  *os.File
-	fileResponse *os.File
-	credentials  *credentials.Credentials
-	httpClient   *http.Client
-	auth         bool
-	username     string
-	password     string
-	realm        string
+	scheme          string
+	host            string
+	region          string
+	service         string
+	endpoint        string
+	verbose         bool
+	prettify        bool
+	logtofile       bool
+	nosignreq       bool
+	fileRequest     *os.File
+	fileResponse    *os.File
+	credentials     *credentials.Credentials
+	httpClient      *http.Client
+	auth            bool
+	username        string
+	password        string
+	realm           string
+	remoteTerminate bool
+	insecure        bool
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -99,25 +101,33 @@ func newProxy(args ...interface{}) *proxy {
 		CheckRedirect: noRedirect,
 	}
 
+	if args[12].(bool) == true {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
 	return &proxy{
-		endpoint:   args[0].(string),
-		verbose:    args[1].(bool),
-		prettify:   args[2].(bool),
-		logtofile:  args[3].(bool),
-		nosignreq:  args[4].(bool),
-		httpClient: &client,
-		auth:       args[6].(bool),
-		username:   args[7].(string),
-		password:   args[8].(string),
-		realm:      args[9].(string),
+		endpoint:        args[0].(string),
+		verbose:         args[1].(bool),
+		prettify:        args[2].(bool),
+		logtofile:       args[3].(bool),
+		nosignreq:       args[4].(bool),
+		httpClient:      &client,
+		auth:            args[6].(bool),
+		username:        args[7].(string),
+		password:        args[8].(string),
+		realm:           args[9].(string),
+		remoteTerminate: args[10].(bool),
+		region:          args[11].(string),
+		insecure:        args[12].(bool),
 	}
 }
 
 func (p *proxy) parseEndpoint() error {
 	var (
-		link          *url.URL
-		err           error
-		isAWSEndpoint bool
+		link *url.URL
+		err  error
 	)
 
 	if link, err = url.Parse(p.endpoint); err != nil {
@@ -146,6 +156,9 @@ func (p *proxy) parseEndpoint() error {
 	p.scheme = link.Scheme
 	p.host = link.Host
 
+	p.service = "es"
+	logrus.Debugln("AWS Region", p.region)
+
 	// AWS SignV4 enabled, extract required parts for signing process
 	if !p.nosignreq {
 
@@ -153,29 +166,6 @@ func (p *proxy) parseEndpoint() error {
 
 		if len(split) < 2 {
 			logrus.Debugln("Endpoint split is less than 2")
-		}
-
-		awsEndpoints := []string{}
-		for _, partition := range endpoints.DefaultPartitions() {
-			for region := range partition.Regions() {
-				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.es.%s", region, partition.DNSSuffix()))
-			}
-		}
-
-		isAWSEndpoint = false
-		for _, v := range awsEndpoints {
-			if split[1] == v {
-				logrus.Debugln("Provided endpoint is a valid AWS Elasticsearch endpoint")
-				isAWSEndpoint = true
-				break
-			}
-		}
-
-		if isAWSEndpoint {
-			// Extract region and service from link. This should be save now
-			parts := strings.Split(link.Host, ".")
-			p.region, p.service = parts[1], "es"
-			logrus.Debugln("AWS Region", p.region)
 		}
 	}
 
@@ -210,6 +200,10 @@ func (p *proxy) getSigner() *v4.Signer {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.remoteTerminate && r.URL.Path == "/terminate-proxy" && r.Method == http.MethodPost {
+		logrus.Infoln("Terminate Signal")
+		os.Exit(0)
+	}
 
 	if p.auth {
 		user, pass, ok := r.BasicAuth()
@@ -330,6 +324,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			fmt.Println()
 			fmt.Println("========================")
+			fmt.Println("Region: ", p.region)
 			fmt.Println(t.Format("2006/01/02 15:04:05"))
 			fmt.Println("Remote Address: ", r.RemoteAddr)
 			fmt.Println("Request URI: ", proxied.RequestURI())
@@ -420,22 +415,25 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		debug         bool
-		auth          bool
-		username      string
-		password      string
-		realm         string
-		verbose       bool
-		prettify      bool
-		logtofile     bool
-		nosignreq     bool
-		ver           bool
-		endpoint      string
-		listenAddress string
-		fileRequest   *os.File
-		fileResponse  *os.File
-		err           error
-		timeout       int
+		debug           bool
+		auth            bool
+		username        string
+		password        string
+		realm           string
+		verbose         bool
+		prettify        bool
+		logtofile       bool
+		nosignreq       bool
+		ver             bool
+		endpoint        string
+		listenAddress   string
+		fileRequest     *os.File
+		fileResponse    *os.File
+		err             error
+		timeout         int
+		remoteTerminate bool
+		region          string
+		insecure        bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -451,6 +449,9 @@ func main() {
 	flag.StringVar(&username, "username", "", "HTTP Basic Auth Username")
 	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
+	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
+	flag.StringVar(&region, "region", "", "AWS Region (ex. us-west-2)")
+	flag.BoolVar(&insecure, "insecure", false, "Verify SSL")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -496,6 +497,9 @@ func main() {
 		username,
 		password,
 		realm,
+		remoteTerminate,
+		region,
+		insecure,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
