@@ -30,7 +30,6 @@ import (
 )
 
 func logger(debug bool) {
-
 	formatFilePath := func(path string) string {
 		arr := strings.Split(path, "/")
 		return arr[len(arr)-1]
@@ -87,7 +86,6 @@ type proxy struct {
 	password        string
 	realm           string
 	remoteTerminate bool
-	insecure        bool
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -99,12 +97,6 @@ func newProxy(args ...interface{}) *proxy {
 	client := http.Client{
 		Timeout:       time.Duration(args[5].(int)) * time.Second,
 		CheckRedirect: noRedirect,
-	}
-
-	if args[12].(bool) == true {
-		client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
 	}
 
 	return &proxy{
@@ -120,7 +112,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		region:          args[11].(string),
-		insecure:        args[12].(bool),
+		service:         "es",
 	}
 }
 
@@ -156,14 +148,9 @@ func (p *proxy) parseEndpoint() error {
 	p.scheme = link.Scheme
 	p.host = link.Host
 
-	p.service = "es"
-	logrus.Debugln("AWS Region", p.region)
-
 	// AWS SignV4 enabled, extract required parts for signing process
 	if !p.nosignreq {
-
 		split := strings.SplitAfterN(link.Hostname(), ".", 2)
-
 		if len(split) < 2 {
 			logrus.Debugln("Endpoint split is less than 2")
 		}
@@ -175,7 +162,6 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-
 		sess, err := session.NewSession(
 			&aws.Config{
 				Region:                        aws.String(p.region),
@@ -324,7 +310,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			fmt.Println()
 			fmt.Println("========================")
-			fmt.Println("Region: ", p.region)
 			fmt.Println(t.Format("2006/01/02 15:04:05"))
 			fmt.Println("Remote Address: ", r.RemoteAddr)
 			fmt.Println("Request URI: ", proxied.RequestURI())
@@ -342,7 +327,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.logtofile {
-
 		requestID := primitive.NewObjectID().Hex()
 
 		reqStruct := &requestStruct{
@@ -408,7 +392,6 @@ func copyHeaders(dst, src http.Header) {
 				dst.Add(k, v)
 			}
 		}
-
 	}
 }
 
@@ -499,8 +482,13 @@ func main() {
 		realm,
 		remoteTerminate,
 		region,
-		insecure,
 	)
+
+	if insecure == true {
+		p.httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 
 	if err = p.parseEndpoint(); err != nil {
 		logrus.Fatalln(err)
@@ -508,7 +496,6 @@ func main() {
 	}
 
 	if p.logtofile {
-
 		requestFname := fmt.Sprintf("request-%s.log", primitive.NewObjectID().Hex())
 		if fileRequest, err = os.Create(requestFname); err != nil {
 			log.Fatalln(err.Error())
@@ -523,7 +510,6 @@ func main() {
 
 		p.fileRequest = fileRequest
 		p.fileResponse = fileResponse
-
 	}
 
 	logrus.Infof("Listening on %s...\n", listenAddress)
