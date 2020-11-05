@@ -69,23 +69,24 @@ type responseStruct struct {
 }
 
 type proxy struct {
-	scheme       string
-	host         string
-	region       string
-	service      string
-	endpoint     string
-	verbose      bool
-	prettify     bool
-	logtofile    bool
-	nosignreq    bool
-	fileRequest  *os.File
-	fileResponse *os.File
-	credentials  *credentials.Credentials
-	httpClient   *http.Client
-	auth         bool
-	username     string
-	password     string
-	realm        string
+	scheme          string
+	host            string
+	region          string
+	service         string
+	endpoint        string
+	verbose         bool
+	prettify        bool
+	logtofile       bool
+	nosignreq       bool
+	fileRequest     *os.File
+	fileResponse    *os.File
+	credentials     *credentials.Credentials
+	httpClient      *http.Client
+	auth            bool
+	username        string
+	password        string
+	realm           string
+	remoteTerminate bool
 	assumeRole   string
 }
 
@@ -101,16 +102,17 @@ func newProxy(args ...interface{}) *proxy {
 	}
 
 	return &proxy{
-		endpoint:   args[0].(string),
-		verbose:    args[1].(bool),
-		prettify:   args[2].(bool),
-		logtofile:  args[3].(bool),
-		nosignreq:  args[4].(bool),
-		httpClient: &client,
-		auth:       args[6].(bool),
-		username:   args[7].(string),
-		password:   args[8].(string),
-		realm:      args[9].(string),
+		endpoint:        args[0].(string),
+		verbose:         args[1].(bool),
+		prettify:        args[2].(bool),
+		logtofile:       args[3].(bool),
+		nosignreq:       args[4].(bool),
+		httpClient:      &client,
+		auth:            args[6].(bool),
+		username:        args[7].(string),
+		password:        args[8].(string),
+		realm:           args[9].(string),
+		remoteTerminate: args[10].(bool),
 		assumeRole: args[10].(string),
 	}
 }
@@ -225,6 +227,10 @@ func (p *proxy) getSigner() *v4.Signer {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.remoteTerminate && r.URL.Path == "/terminate-proxy" && r.Method == http.MethodPost {
+		logrus.Infoln("Terminate Signal")
+		os.Exit(0)
+	}
 
 	if p.auth {
 		user, pass, ok := r.BasicAuth()
@@ -441,12 +447,6 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		debug         bool
-		auth          bool
-		username      string
-		password      string
-		realm         string
-		assumeRole    string
 		verbose       bool
 		prettify      bool
 		logtofile     bool
@@ -458,6 +458,24 @@ func main() {
 		fileResponse  *os.File
 		err           error
 		timeout       int
+		debug           bool
+		auth            bool
+		username        string
+		password        string
+		realm           string
+		verbose         bool
+		prettify        bool
+		logtofile       bool
+		nosignreq       bool
+		ver             bool
+		endpoint        string
+		listenAddress   string
+		fileRequest     *os.File
+		fileResponse    *os.File
+		err             error
+		timeout         int
+		remoteTerminate bool
+		assumeRole    string
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -473,6 +491,7 @@ func main() {
 	flag.StringVar(&username, "username", "", "HTTP Basic Auth Username")
 	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
+	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.Parse()
 
@@ -519,6 +538,7 @@ func main() {
 		username,
 		password,
 		realm,
+		remoteTerminate,
 		assumeRole,
 	)
 
