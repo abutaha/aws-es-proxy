@@ -66,14 +66,14 @@ func main() {
 		genConf       bool
 	)
 
-	version := 2.0
+	version := "2.0"
 
 	flag.BoolVar(&ver, "version", false, "Print aws-es-proxy version")
 	flag.BoolVar(&genConf, "gen-config", false, "Generates config.yaml")
 	flag.Parse()
 
 	if ver {
-		logrus.Infof("Current version is: v%.1f", version)
+		logrus.Infof("Current version is: %s", version)
 		os.Exit(0)
 	}
 
