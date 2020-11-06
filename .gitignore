@@ -3,3 +3,5 @@ vendor
 glide.lock
 dist
 .idea
+config.yaml
+config-template.yaml
