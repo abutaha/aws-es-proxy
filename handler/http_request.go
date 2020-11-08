@@ -73,6 +73,22 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	addRequiredHeaders(req.Header, proxyReq.Header)
 
 	if conf.GetBool("aws.enabled") {
+
+		// This happens when user start the proxy with aws.enabled=false
+		// then change it to true and reload via remote_api
+		// This is dangerous, as application may panic if AWS credentials are not found!
+		if p.AWSSession == nil {
+			msg := "aws-es-proxy was started with setting 'aws.enabled' set to 'false', but this setting was changed "
+			msg += "after runtime and configuration was reloaded via remote_api service. "
+			msg += "This action may cause the application to panic if AWS credentials are not found"
+			// logrus.Warningln("aws-es-proxy was started with aws.enabled=false, but this setting was updated ")
+			// logrus.Warningln("after runtime and configuration was reloaded through remote_api.")
+			// logrus.Warningln("This action may cause the application to panic if AWS credentials are not found")
+			logrus.Warningln(msg)
+			p.AWSSession = awspkg.NewAWSCreds()
+
+		}
+
 		payload := bytes.NewReader(replaceBody(proxyReq))
 		_, err = p.AWSSession.SignRequest(proxyReq, payload)
 		if err != nil {

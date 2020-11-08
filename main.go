@@ -119,7 +119,20 @@ func main() {
 		logrus.Fatalln("Listen address is not defined in config.yaml")
 	}
 
-	logrus.Infof("aws-es-proxy %s started. Listening on %s", version, listenAddress)
+	msg := fmt.Sprintf("aws-es-proxy %s started on %s", version, listenAddress)
+
+	if conf.GetBool("remote_api.enabled") {
+		remoteAPI := conf.GetString("remote_api.listen")
+		msg = fmt.Sprintf("aws-es-proxy %s started on %s. Remote API started on %s", version, listenAddress, remoteAPI)
+
+		mux := handler.APIServer()
+
+		go func() {
+			logrus.Fatalln(http.ListenAndServe(remoteAPI, mux))
+		}()
+	}
+
+	logrus.Infoln(msg)
 
 	if conf.GetBool("security.self_certificate.enabled") {
 		certPriv, _ = homedir.Expand(conf.GetString("security.self_certificate.cert_private_key"))
