@@ -30,7 +30,7 @@ var (
 
 func init() {
 	if !conf.GetBool("logging.enabled") {
-		logrus.Warnln("HTTP requests and responses logging is disabled in config.yaml (logging.enabled=false). Client Requests will not be logged.")
+		logrus.Warnln("Client HTTP requests and responses logging is disabled in config.yaml (logging.enabled=false). Client Requests will not be logged.")
 		return
 	}
 

@@ -1,17 +1,21 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/abutaha/aws-es-proxy/awspkg"
+	"github.com/mitchellh/go-homedir"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -29,6 +33,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var (
 		start    time.Time
 		err      error
+		realm    string
 		reqDump  []byte
 		proxyURL *url.URL
 		proxyReq *http.Request
@@ -36,9 +41,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	start = time.Now()
 
-	// if conf.GetBool("security.http_auth.enabled") {
-	// 	checkAuth(req)
-	// }
+	if conf.GetBool("security.http_auth.enabled") {
+		if !checkAuth(req) {
+			realm = conf.GetString("security.http_auth.realm")
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", realm))
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("401 Unauthorised.\n"))
+			return
+		}
+	}
 
 	if reqDump, err = httputil.DumpRequest(req, true); err != nil {
 		logrus.WithError(err).Errorln("Failed to dump request.")
@@ -143,18 +154,71 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func checkAuth(r *http.Request) bool {
-	return true
-}
-
-/*
-if p.auth {
-		user, pass, ok := r.BasicAuth()
-
-		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(p.username)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(p.password)) != 1 {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", p.realm))
-			w.WriteHeader(401)
-			_, _ = w.Write([]byte("Unauthorised.\n"))
-			return
-		}
+	if !conf.GetBool("security.http_auth.enabled") {
+		return false
 	}
-*/
+
+	var (
+		provider  string
+		reqUser   string
+		reqPasswd string
+		ok        bool
+		username  string
+		password  string
+		userFile  string
+		err       error
+		fHandler  *os.File
+		line      string
+		userpass  []string
+	)
+
+	if provider = conf.GetString("security.http_auth.provider"); len(provider) == 0 {
+		logrus.Debugln("http_auth provider missing")
+		return false
+	}
+
+	reqUser, reqPasswd, ok = r.BasicAuth()
+
+	if !ok {
+		return false
+	}
+
+	switch provider {
+	case "config":
+		username = conf.GetString("security.http_auth.username")
+		password = conf.GetString("security.http_auth.password")
+
+		if reqUser == username && reqPasswd == password {
+			return true
+		}
+	case "file":
+
+		if userFile = conf.GetString("security.http_auth.basic_auth_file"); len(userFile) == 0 {
+			logrus.Debugln("http_auth basic auth file is missing")
+			return false
+		}
+
+		userFile, _ = homedir.Expand(userFile)
+
+		if fHandler, err = os.Open(userFile); err != nil {
+			logrus.Debugln("failed to open http auth file, ", err.Error())
+			return false
+		}
+		defer fHandler.Close()
+
+		scanner := bufio.NewScanner(fHandler)
+		for scanner.Scan() {
+			line = scanner.Text()
+			userpass = strings.Split(line, ",")
+			if reqUser == userpass[0] && reqPasswd == userpass[1] {
+				return true
+			}
+		}
+
+		// if err := scanner.Err(); err != nil {
+		// 	logrus.Fatal(err)
+		// }
+	}
+
+	return false
+}
