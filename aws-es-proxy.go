@@ -91,7 +91,6 @@ type proxy struct {
 }
 
 func newProxy(args ...interface{}) *proxy {
-
 	noRedirect := func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
@@ -159,6 +158,7 @@ func (p *proxy) parseEndpoint() error {
 		if len(split) < 2 {
 			logrus.Debugln("Endpoint split is less than 2")
 		}
+
 		awsEndpoints := []string{}
 		for _, partition := range endpoints.DefaultPartitions() {
 			for region := range partition.Regions() {
