@@ -86,6 +86,7 @@ type proxy struct {
 	password        string
 	realm           string
 	remoteTerminate bool
+	assumeRole      string
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -111,7 +112,8 @@ func newProxy(args ...interface{}) *proxy {
 		password:        args[8].(string),
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
-		region:          args[11].(string),
+		assumeRole:      args[11].(string),
+		region:          args[12].(string),
 		service:         "es",
 	}
 }
@@ -172,13 +174,26 @@ func (p *proxy) getSigner() *v4.Signer {
 			logrus.Debugln(err)
 		}
 
-		credentials := sess.Config.Credentials
 		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
 		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+
+		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
-			credentials = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
+			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+		} else if p.assumeRole != "" {
+			logrus.Infof("Assuming credentials from %s", p.assumeRole)
+			creds = stscreds.NewCredentials(sess, p.assumeRole, func(provider *stscreds.AssumeRoleProvider) {
+				provider.Duration = 17 * time.Minute
+				provider.ExpiryWindow = 13 * time.Minute
+				provider.MaxJitterFrac = 0.1
+			})
+		} else {
+			logrus.Infoln("Using default credentials")
+			creds = sess.Config.Credentials
 		}
-		p.credentials = credentials
+
+		p.credentials = creds
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
 
@@ -238,7 +253,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
-		signer.Sign(req, payload, p.service, p.region, time.Now())
+		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
+		if err != nil {
+			p.credentials = nil
+			logrus.Errorln("Failed to sign", err)
+			http.Error(w, "Failed to sign", http.StatusForbidden)
+			return
+		}
 	}
 
 	resp, err := p.httpClient.Do(req)
@@ -415,6 +436,7 @@ func main() {
 		err             error
 		timeout         int
 		remoteTerminate bool
+		assumeRole      string
 		region          string
 		insecure        bool
 	)
@@ -433,6 +455,7 @@ func main() {
 	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
+	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.StringVar(&region, "region", "", "AWS Region (ex. us-west-2)")
 	flag.BoolVar(&insecure, "insecure", false, "Verify SSL")
 	flag.Parse()
@@ -481,6 +504,7 @@ func main() {
 		password,
 		realm,
 		remoteTerminate,
+		assumeRole,
 		region,
 	)
 
