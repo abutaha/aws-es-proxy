@@ -25,4 +25,5 @@ https://github.com/em0ney
 https://github.com/zqben402
 https://github.com/dlackty
 https://github.com/amcintosh
-
+https://github.com/valiton
+https://github.com/joshgarnett
