@@ -87,7 +87,7 @@ type proxy struct {
 	password        string
 	realm           string
 	remoteTerminate bool
-	assumeRole   string
+	assumeRole      string
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -113,7 +113,7 @@ func newProxy(args ...interface{}) *proxy {
 		password:        args[8].(string),
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
-		assumeRole: args[10].(string),
+		assumeRole:      args[11].(string),
 	}
 }
 
@@ -189,7 +189,6 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-
 		sess, err := session.NewSession(
 			&aws.Config{
 				Region:                        aws.String(p.region),
@@ -447,17 +446,6 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		verbose       bool
-		prettify      bool
-		logtofile     bool
-		nosignreq     bool
-		ver           bool
-		endpoint      string
-		listenAddress string
-		fileRequest   *os.File
-		fileResponse  *os.File
-		err           error
-		timeout       int
 		debug           bool
 		auth            bool
 		username        string
@@ -475,7 +463,7 @@ func main() {
 		err             error
 		timeout         int
 		remoteTerminate bool
-		assumeRole    string
+		assumeRole      string
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
