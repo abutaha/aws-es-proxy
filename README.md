@@ -151,8 +151,10 @@ Usage of ./aws-es-proxy:
         Print user requests
   -version
         Print aws-es-proxy version
+  -assume
+        Optionally specify role to assume
   -region
-        AWS region (ex. us-west-2) (Required)
+        AWS Region, optional (ex. us-west-2)
   -insecure
         Will not verify SSL (default false)
 ```

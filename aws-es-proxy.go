@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
 	"github.com/aws/aws-sdk-go/aws/session"
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/sirupsen/logrus"
@@ -120,8 +121,9 @@ func newProxy(args ...interface{}) *proxy {
 
 func (p *proxy) parseEndpoint() error {
 	var (
-		link *url.URL
-		err  error
+		link          *url.URL
+		err           error
+		isAWSEndpoint bool
 	)
 
 	if link, err = url.Parse(p.endpoint); err != nil {
@@ -150,11 +152,34 @@ func (p *proxy) parseEndpoint() error {
 	p.scheme = link.Scheme
 	p.host = link.Host
 
-	// AWS SignV4 enabled, extract required parts for signing process
-	if !p.nosignreq {
+	// AWS SignV4 enabled, extract required parts for signing process (if region flag is not supplied)
+	if !p.nosignreq && p.region != "" {
 		split := strings.SplitAfterN(link.Hostname(), ".", 2)
+
 		if len(split) < 2 {
 			logrus.Debugln("Endpoint split is less than 2")
+		}
+		awsEndpoints := []string{}
+		for _, partition := range endpoints.DefaultPartitions() {
+			for region := range partition.Regions() {
+				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.es.%s", region, partition.DNSSuffix()))
+			}
+		}
+
+		isAWSEndpoint = false
+		for _, v := range awsEndpoints {
+			if split[1] == v {
+				logrus.Debugln("Provided endpoint is a valid AWS Elasticsearch endpoint")
+				isAWSEndpoint = true
+				break
+			}
+		}
+
+		if isAWSEndpoint {
+			// Extract region and service from link. This should be save now
+			parts := strings.Split(link.Host, ".")
+			p.region, p.service = parts[1], "es"
+			logrus.Debugln("AWS Region", p.region)
 		}
 	}
 
@@ -456,7 +481,7 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
-	flag.StringVar(&region, "region", "", "AWS Region (ex. us-west-2)")
+	flag.StringVar(&region, "region", "", "AWS Region, optional (ex. us-west-2)")
 	flag.BoolVar(&insecure, "insecure", false, "Verify SSL")
 	flag.Parse()
 
