@@ -417,6 +417,10 @@ func addHeaders(src, dest http.Header) {
 		dest.Add("Content-Type", val[0])
 	}
 
+	if val, ok := src["Accept"]; ok {
+		dest.Add("Accept", val[0])
+	}
+
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
 	}
@@ -483,6 +487,12 @@ func main() {
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.Parse()
 
+	if ver {
+		version := 1.1
+		logrus.Infof("Current version is: v%.1f", version)
+		os.Exit(0)
+	}
+
 	if endpoint == "" {
 		if v, ok := os.LookupEnv(strings.ToUpper("endpoint")); ok {
 			endpoint = v
@@ -499,12 +509,6 @@ func main() {
 		logger(true)
 	} else {
 		logger(false)
-	}
-
-	if ver {
-		version := 1.1
-		logrus.Infof("Current version is: v%.1f", version)
-		os.Exit(0)
 	}
 
 	if auth {
