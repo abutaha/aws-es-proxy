@@ -3,3 +3,4 @@ vendor
 glide.lock
 dist
 .idea
+aws-es-proxy
