@@ -152,7 +152,7 @@ func (p *proxy) parseEndpoint() error {
 	p.host = link.Host
 
 	// AWS SignV4 enabled, extract required parts for signing process (if region flag is not supplied)
-	if !p.nosignreq && p.region != "" {
+	if !p.nosignreq && p.region == "" {
 		split := strings.SplitAfterN(link.Hostname(), ".", 2)
 
 		if len(split) < 2 {
