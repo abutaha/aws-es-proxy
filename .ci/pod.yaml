@@ -10,14 +10,14 @@ spec:
       command: ["cat"]
       tty: true
     - name: docker
-      image: docker
+      image: '772592230491.dkr.ecr.eu-west-1.amazonaws.com/docker:latest'
       command: ["cat"]
       tty: true
       volumeMounts:
         - name: docker-socket
           mountPath: "/var/run/docker.sock"
     - name: notifications
-      image: '772592230491.dkr.ecr.eu-west-1.amazonaws.com/jenkins-notifications:0.1.3'
+      image: '772592230491.dkr.ecr.eu-west-1.amazonaws.com/jenkins-notifications:v0.1.9.1'
       command: ["cat"]
       tty: true
       env:
