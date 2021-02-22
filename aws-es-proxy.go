@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httputil"
 	"net/url"
 	"os"
@@ -27,6 +28,7 @@ import (
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/net/publicsuffix"
 )
 
 func logger(debug bool) {
@@ -96,9 +98,15 @@ func newProxy(args ...interface{}) *proxy {
 		return http.ErrUseLastResponse
 	}
 
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	client := http.Client{
 		Timeout:       time.Duration(args[5].(int)) * time.Second,
 		CheckRedirect: noRedirect,
+		Jar:           jar,
 	}
 
 	return &proxy{
@@ -419,6 +427,10 @@ func addHeaders(src, dest http.Header) {
 
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
+	}
+
+	if val, ok := src["Authorization"]; ok {
+		dest.Add("Authorization", val[0])
 	}
 }
 
