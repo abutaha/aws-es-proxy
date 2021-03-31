@@ -37,3 +37,6 @@ workflows:
     jobs:
       - publish:
           context: build-publish
+          filters:
+            branches:
+              ignore: master
