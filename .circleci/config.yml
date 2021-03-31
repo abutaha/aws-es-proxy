@@ -1,0 +1,39 @@
+aliases:
+  - &working_directory ~/repo
+
+  - &attach_workspace
+    attach_workspace:
+      at: ~/repo
+
+  - &docker_deploy_image
+    docker:
+      - image: instantor/kubernetes-deploy:2019-06-14-05d7ff1
+        auth:
+          username: ${DOCKERHUB_USERNAME}
+          password: ${DOCKERHUB_PASS}
+
+version: 2
+jobs:
+  publish:
+    <<: *docker_deploy_image
+    working_directory: *working_directory
+    steps:
+      - setup_remote_docker
+      - checkout
+      - *attach_workspace
+      - run: |
+          echo instantor/aws-es-proxy:`.circleci/bin/ver.sh` > image.txt
+          docker build -t `cat image.txt` .
+          echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USERNAME --password-stdin
+          docker push `cat image.txt`
+      - run:
+          name: Post PR publish feedback
+          command: |
+            pr-comment-ci "Your image has been published 👍 \\\\n \`$(cat image.txt)\`"
+
+workflows:
+  version: 2
+  workflow:
+    jobs:
+      - publish:
+          context: build-publish
