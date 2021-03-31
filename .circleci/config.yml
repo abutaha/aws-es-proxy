@@ -39,4 +39,4 @@ workflows:
           context: build-publish
           filters:
             branches:
-              ignore: master
+              only: master
