@@ -11,7 +11,7 @@ spec:
       command: ["cat"]
       tty: true
     - name: docker
-      image: '772592230491.dkr.ecr.eu-west-1.amazonaws.com/docker:latest'
+      image: docker
       command: ["cat"]
       tty: true
       volumeMounts:
