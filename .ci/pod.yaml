@@ -4,6 +4,7 @@ metadata:
   annotations:
     iam.amazonaws.com/role: "KubernetesJenkinsAgent"
 spec:
+  serviceAccount: "jenkins"
   containers:
     - name: go
       image: "golang:1.14-alpine"
