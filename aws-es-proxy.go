@@ -19,7 +19,10 @@ import (
 	"strings"
 	"time"
 
+	"context"
 	"github.com/aws/aws-sdk-go/aws"
+	awsv2 "github.com/aws/aws-sdk-go-v2/aws"
+	configv2 "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
 	"github.com/aws/aws-sdk-go/aws/endpoints"
@@ -88,6 +91,7 @@ type proxy struct {
 	realm           string
 	remoteTerminate bool
 	assumeRole      string
+	sso             bool
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -114,6 +118,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		sso:             args[12].(bool),
 	}
 }
 
@@ -189,19 +194,30 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-		sess, err := session.NewSession(
-			&aws.Config{
-				Region:                        aws.String(p.region),
-				CredentialsChainVerboseErrors: aws.Bool(true),
-			},
-		)
+		var sess *session.Session
+		var err error
+		var cfg awsv2.Config
+		if p.sso {
+			profile := os.Getenv("AWS_PROFILE")
+			logrus.Debugf("Using profile: %s", profile)
+			cfg, err = configv2.LoadDefaultConfig(
+				context.TODO(),
+				configv2.WithSharedConfigProfile(profile),
+			)
+		} else {
+			sess, err = session.NewSession(
+				&aws.Config{
+					Region:                        aws.String(p.region),
+					CredentialsChainVerboseErrors: aws.Bool(true),
+				},
+			)
+		}
 		if err != nil {
 			logrus.Debugln(err)
 		}
 
 		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
 		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
-
 		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
 			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
@@ -213,11 +229,16 @@ func (p *proxy) getSigner() *v4.Signer {
 				provider.ExpiryWindow = 13 * time.Minute
 				provider.MaxJitterFrac = 0.1
 			})
-		} else {
+		} else if p.sso {
+			credsv2, err := cfg.Credentials.Retrieve(context.TODO())
+			creds = credentials.NewStaticCredentials(credsv2.AccessKeyID, credsv2.SecretAccessKey, credsv2.SessionToken)
+			if err != nil {
+				logrus.Fatal(err)
+			}
+		}else {
 			logrus.Infoln("Using default credentials")
 			creds = sess.Config.Credentials
 		}
-
 		p.credentials = creds
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
@@ -464,6 +485,7 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		sso             bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -481,6 +503,7 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.BoolVar(&sso, "sso", false, "Use AWS SSO for auth")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -528,6 +551,7 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		sso,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
