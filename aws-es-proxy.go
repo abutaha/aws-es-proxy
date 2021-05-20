@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,15 +21,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/endpoints"
-	"github.com/aws/aws-sdk-go/aws/session"
-	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
+
+
+var ESURL_REGEXP = regexp.MustCompile(`http(?:s?)://.+\..+\.es.amazonaws.com`)
 
 func logger(debug bool) {
 
@@ -80,7 +86,7 @@ type proxy struct {
 	nosignreq       bool
 	fileRequest     *os.File
 	fileResponse    *os.File
-	credentials     *credentials.Credentials
+	credentials     aws.Credentials
 	httpClient      *http.Client
 	auth            bool
 	username        string
@@ -88,6 +94,7 @@ type proxy struct {
 	realm           string
 	remoteTerminate bool
 	assumeRole      string
+	sso             bool
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -114,6 +121,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		sso:             args[12].(bool),
 	}
 }
 
@@ -159,28 +167,13 @@ func (p *proxy) parseEndpoint() error {
 			logrus.Debugln("Endpoint split is less than 2")
 		}
 
-		awsEndpoints := []string{}
-		for _, partition := range endpoints.DefaultPartitions() {
-			for region := range partition.Regions() {
-				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.es.%s", region, partition.DNSSuffix()))
-			}
-		}
-
-		isAWSEndpoint = false
-		for _, v := range awsEndpoints {
-			if split[1] == v {
-				logrus.Debugln("Provided endpoint is a valid AWS Elasticsearch endpoint")
-				isAWSEndpoint = true
-				break
-			}
-		}
-
+		isAWSEndpoint = ESURL_REGEXP.MatchString(p.endpoint)
 		if isAWSEndpoint {
-			// Extract region and service from link. This should be save now
 			parts := strings.Split(link.Host, ".")
 			p.region, p.service = parts[1], "es"
 			logrus.Debugln("AWS Region", p.region)
 		}
+
 	}
 
 	return nil
@@ -188,41 +181,55 @@ func (p *proxy) parseEndpoint() error {
 
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
-	if p.credentials == nil {
-		sess, err := session.NewSession(
-			&aws.Config{
-				Region:                        aws.String(p.region),
-				CredentialsChainVerboseErrors: aws.Bool(true),
-			},
-		)
+	
+	if p.credentials == (aws.Credentials{}) {
+		var cfg aws.Config
+		var err error
+		
+		if p.sso {
+			profile := os.Getenv("AWS_PROFILE")
+			logrus.Debugf("Using profile: %s", profile)
+			cfg, err = config.LoadDefaultConfig(
+				context.TODO(),
+				config.WithSharedConfigProfile(profile),
+			)
+		} else {
+			cfg, err = config.LoadDefaultConfig(context.TODO(),
+					config.WithRegion(p.region),
+			)
+		}
 		if err != nil {
-			logrus.Debugln(err)
+			logrus.Infoln(err)
 		}
 
 		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
 		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
 
-		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
 			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
-			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
-		} else if p.assumeRole != "" {
-			logrus.Infof("Assuming credentials from %s", p.assumeRole)
-			creds = stscreds.NewCredentials(sess, p.assumeRole, func(provider *stscreds.AssumeRoleProvider) {
-				provider.Duration = 17 * time.Minute
-				provider.ExpiryWindow = 13 * time.Minute
-				provider.MaxJitterFrac = 0.1
+			credsProvider := stscreds.NewWebIdentityRoleProvider(sts.NewFromConfig(cfg), awsRoleARN, stscreds.IdentityTokenFile(awsWebIdentityTokenFile), func(o *stscreds.WebIdentityRoleOptions) {
+				o.RoleSessionName = ""
 			})
-		} else {
-			logrus.Infoln("Using default credentials")
-			creds = sess.Config.Credentials
+			cfg.Credentials = aws.NewCredentialsCache(credsProvider)
+		} else if p.assumeRole != "" {
+			client := sts.NewFromConfig(cfg)
+			credsProvider := stscreds.NewAssumeRoleProvider(client, p.assumeRole, func(assumeRoleOptions *stscreds.AssumeRoleOptions) {
+				assumeRoleOptions.Duration = 17 * time.Minute
+			})
+			cfg.Credentials = aws.NewCredentialsCache(credsProvider, func(options *aws.CredentialsCacheOptions) {
+				options.ExpiryWindow = 13 * time.Minute
+				options.ExpiryWindowJitterFrac = 0.1
+			})
 		}
-
+		creds, err := cfg.Credentials.Retrieve(context.Background())
+		if err != nil {
+			logrus.Fatalf("Unable to retrieve credentials %s", err)
+		}
 		p.credentials = creds
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
 
-	return v4.NewSigner(p.credentials)
+	return v4.NewSigner()
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -276,11 +283,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Start AWS session from ENV, Shared Creds or EC2Role
 		signer := p.getSigner()
 
+
 		// Sign the request with AWSv4
-		payload := bytes.NewReader(replaceBody(req))
-		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
+		payload := replaceBody(req)
+		payloadHash := sha256.Sum256(payload)
+		err := signer.SignHTTP(context.TODO(), p.credentials, req, hex.EncodeToString(payloadHash[:]), p.service, p.region, time.Now())
 		if err != nil {
-			p.credentials = nil
+			p.credentials = aws.Credentials{}
 			logrus.Errorln("Failed to sign", err)
 			http.Error(w, "Failed to sign", http.StatusForbidden)
 			return
@@ -298,7 +307,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// AWS credentials expired, need to generate fresh ones
 		if resp.StatusCode == 403 {
 			logrus.Errorln("Received 403 from AWSAuth, invalidating credentials for retrial")
-			p.credentials = nil
+			p.credentials = aws.Credentials{}
 
 			logrus.Debugln("Received Status code from AWS:", resp.StatusCode)
 			b := bytes.Buffer{}
@@ -464,6 +473,7 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		sso             bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -481,6 +491,7 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.BoolVar(&sso, "sso", false, "Use AWS SSO for auth")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -528,6 +539,7 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		sso,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
