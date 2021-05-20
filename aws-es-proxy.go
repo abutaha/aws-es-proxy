@@ -213,19 +213,6 @@ func (p *proxy) getSigner() *v4.Signer {
 			cfg.Credentials = aws.NewCredentialsCache(credsProvider)
 		} else if p.assumeRole != "" {
 			client := sts.NewFromConfig(cfg)
-			identity, err := client.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
-			if err != nil {
-				logrus.Infoln("error:", err)
-				os.Exit(1)
-			}
-		
-			logrus.Infof(
-				"Account: %s\nUserID: %s\nARN: %s\n",
-				aws.ToString(identity.Account),
-				aws.ToString(identity.UserId),
-				aws.ToString(identity.Arn),
-			)
-			logrus.Infof("Assuming credentials from %s", p.assumeRole)
 			credsProvider := stscreds.NewAssumeRoleProvider(client, p.assumeRole, func(assumeRoleOptions *stscreds.AssumeRoleOptions) {
 				assumeRoleOptions.Duration = 17 * time.Minute
 			})
