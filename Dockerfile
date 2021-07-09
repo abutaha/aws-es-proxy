@@ -1,18 +1,14 @@
-FROM golang:1.14-alpine
-
-WORKDIR /go/src/github.com/abutaha/aws-es-proxy
-COPY . .
-
-RUN CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy
-
-FROM alpine:3.11
-LABEL name="aws-es-proxy" \
-      version="latest"
+FROM golang:alpine as builder
 
 RUN apk --no-cache add ca-certificates
-WORKDIR /home/
-COPY --from=0 /go/src/github.com/abutaha/aws-es-proxy/aws-es-proxy /usr/local/bin/
+WORKDIR /go/src/github.com/abutaha/aws-es-proxy
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy
 
+FROM scratch
+
+COPY --from=builder /go/src/github.com/abutaha/aws-es-proxy/aws-es-proxy /usr/local/bin/
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 ENV PORT_NUM 9200
 EXPOSE ${PORT_NUM}
 
