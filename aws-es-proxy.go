@@ -88,6 +88,7 @@ type proxy struct {
 	realm           string
 	remoteTerminate bool
 	assumeRole      string
+	blockDeletes    bool
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -114,6 +115,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		blockDeletes:    args[12].(bool),
 	}
 }
 
@@ -225,9 +227,18 @@ func (p *proxy) getSigner() *v4.Signer {
 	return v4.NewSigner(p.credentials)
 }
 
+func isDeletePath(path string) bool {
+	return strings.Contains(path, "_delete_by_query")
+}
+
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.remoteTerminate && r.URL.Path == "/terminate-proxy" && r.Method == http.MethodPost {
 		logrus.Infoln("Terminate Signal")
+		os.Exit(0)
+	}
+
+	if p.blockDeletes && (r.Method == http.MethodDelete || isDeletePath(r.URL.Path)) {
+		logrus.Warningln("Blocked Delete Request")
 		os.Exit(0)
 	}
 
@@ -464,6 +475,7 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		blockDeletes    bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -481,6 +493,7 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.BoolVar(&blockDeletes, "block-deletes", false, "Block delete requests, defaults to false")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -528,6 +541,7 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		blockDeletes,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
