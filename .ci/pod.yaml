@@ -6,17 +6,15 @@ metadata:
 spec:
   serviceAccount: "jenkins"
   containers:
-    - name: go
-      image: "golang:1.14-alpine"
-      command: ["cat"]
-      tty: true
     - name: docker
-      image: docker
+      image: "772592230491.dkr.ecr.eu-west-1.amazonaws.com/cicd/docker-buildx:lts"
       command: ["cat"]
       tty: true
       volumeMounts:
         - name: docker-socket
           mountPath: "/var/run/docker.sock"
+        - name: buildx-multi-arch
+          mountPath: "/root/.docker/buildx/instances/multi-arch"
     - name: notifications
       image: '772592230491.dkr.ecr.eu-west-1.amazonaws.com/jenkins-notifications:v0.1.9.1'
       command: ["cat"]
@@ -34,3 +32,6 @@ spec:
     - name: maven-cache
       hostPath:
         path: /root/.m2
+    - name: buildx-multi-arch
+      hostPath:
+        path: /home/ec2-user/.docker/buildx/instances/multi-arch

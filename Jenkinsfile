@@ -20,19 +20,14 @@ pipeline {
     }
 
     stages {
-
-        stage("GO Build") {
-            steps {
-                container('go') {
-                    sh "CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy"
-                }
-            }
-        }
-
         stage("Build") {
             steps {
                 container('docker') {
-                    sh "docker build -t aws-es-proxy:${env.DOCKER_TAG} ."
+                    sh """
+                        for arch in amd64 arm64  ; do
+                            docker build -t aws-es-proxy:${env.DOCKER_TAG}-\${arch} .
+                        done
+                    """
                 }
             }
         }
@@ -49,8 +44,16 @@ pipeline {
                 container('docker') {
                     script {
                         docker.withRegistry("https://${DOCKER_REPOSITORY}", 'ecr:eu-west-1:ecr-credentials') {
-                            sh "docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
-                            sh "docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}"
+                            sh """
+                                for arch in amd64 arm64  ; do
+                                    docker tag aws-es-proxy:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}-\${arch}
+                                    docker push ${DOCKER_REPOSITORY}/aws-es-proxy:${env.DOCKER_TAG}-\${arch}
+                                done 
+
+                                echo "Creating manifest"
+                                docker manifest create ${DOCKER_REPOSITORY}/${DOCKER_IMAGE}:${env.DOCKER_TAG} ${DOCKER_REPOSITORY}/${DOCKER_IMAGE}:${env.DOCKER_TAG}-amd64 ${DOCKER_REPOSITORY}/${DOCKER_IMAGE}:${env.DOCKER_TAG}-arm64
+                                docker manifest push ${DOCKER_REPOSITORY}/${DOCKER_IMAGE}:${env.DOCKER_TAG}
+                            """
                         }
                     }
                 }
