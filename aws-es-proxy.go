@@ -17,6 +17,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func logger(debug bool) {
@@ -90,7 +95,31 @@ type proxy struct {
 	realm           string
 	remoteTerminate bool
 	assumeRole      string
+	exposeMetrics   bool
 }
+
+var (
+	http2xx = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_http2xx_total",
+		Help: "The total number of HTTP 2xx received from elasticsearch",
+	})
+	http3xx = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_http3xx_total",
+		Help: "The total number of HTTP 3xx received from elasticsearch",
+	})
+	http4xx = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_http4xx_total",
+		Help: "The total number of HTTP 4xx received from elasticsearch",
+	})
+	http5xx = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_http5xx_total",
+		Help: "The total number of HTTP 5xx received from elasticsearch",
+	})
+	esError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_es_resp_error_total",
+		Help: "The total number of returned errors in reposonse body from elasticsearch",
+	})
+)
 
 func newProxy(args ...interface{}) *proxy {
 
@@ -122,6 +151,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		exposeMetrics:   args[12].(bool),
 	}
 }
 
@@ -409,6 +439,25 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	if p.exposeMetrics {
+		switch code := resp.StatusCode; {
+		case code < 300:
+			http2xx.Inc()
+		case code < 400:
+			http3xx.Inc()
+		case code < 500:
+			http4xx.Inc()
+		default:
+			http5xx.Inc()
+		}
+
+		var esRespBody map[string]interface{}
+		json.Unmarshal(body.Bytes(), &esRespBody)
+		if _, ok := esRespBody["error"]; ok {
+			esError.Inc()
+		}
+	}
+
 }
 
 // Recent versions of ES/Kibana require
@@ -458,24 +507,27 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		debug           bool
-		auth            bool
-		username        string
-		password        string
-		realm           string
-		verbose         bool
-		prettify        bool
-		logtofile       bool
-		nosignreq       bool
-		ver             bool
-		endpoint        string
-		listenAddress   string
-		fileRequest     *os.File
-		fileResponse    *os.File
-		err             error
-		timeout         int
-		remoteTerminate bool
-		assumeRole      string
+		debug                bool
+		auth                 bool
+		username             string
+		password             string
+		realm                string
+		verbose              bool
+		prettify             bool
+		logtofile            bool
+		nosignreq            bool
+		ver                  bool
+		endpoint             string
+		listenAddress        string
+		fileRequest          *os.File
+		fileResponse         *os.File
+		err                  error
+		timeout              int
+		remoteTerminate      bool
+		assumeRole           string
+		exposeMetrics        bool
+		metricsListenAddress string
+		metricsPort          int
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -493,6 +545,9 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.BoolVar(&exposeMetrics, "expose-metrics", false, "Expose prometheus metrics")
+	flag.StringVar(&metricsListenAddress, "metrics-listen", "127.0.0.1", "IP to bind to for metrics")
+	flag.IntVar(&metricsPort, "metrics-port", 9100, "Port for metrics")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -540,6 +595,7 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		exposeMetrics,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
@@ -565,6 +621,15 @@ func main() {
 		p.fileResponse = fileResponse
 
 	}
+
+	go func() {
+		if exposeMetrics {
+			logrus.Infof("Enabled metrics on %s...\n", metricsListenAddress+":"+strconv.Itoa(metricsPort)+"/metrics")
+			http.Handle("/metrics", promhttp.Handler())
+			http.ListenAndServe(metricsListenAddress+":"+strconv.Itoa(metricsPort), nil)
+
+		}
+	}()
 
 	logrus.Infof("Listening on %s...\n", listenAddress)
 	logrus.Fatalln(http.ListenAndServe(listenAddress, p))
