@@ -100,20 +100,24 @@ type proxy struct {
 
 var (
 	http2xx = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "aws-es-proxy_http2xx_total",
+		Name: "aws_es_proxy_http2xx_total",
 		Help: "The total number of HTTP 2xx received from elasticsearch",
 	})
 	http3xx = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "aws-es-proxy_http3xx_total",
+		Name: "aws_es_proxy_http3xx_total",
 		Help: "The total number of HTTP 3xx received from elasticsearch",
 	})
 	http4xx = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "aws-es-proxy_http4xx_total",
+		Name: "aws_es_proxy_http4xx_total",
 		Help: "The total number of HTTP 4xx received from elasticsearch",
 	})
 	http5xx = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "aws-es-proxy_http5xx_total",
+		Name: "aws_es_proxy_http5xx_total",
 		Help: "The total number of HTTP 5xx received from elasticsearch",
+	})
+	esError = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "aws_es_proxy_es_resp_error_total",
+		Help: "The total number of returned errors in reposonse body from elasticsearch",
 	})
 )
 
@@ -446,6 +450,12 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			http5xx.Inc()
 		}
+
+		var esRespBody map[string]interface{}
+		json.Unmarshal(body.Bytes(), &esRespBody)
+		if _, ok := esRespBody["error"]; ok {
+			esError.Inc()
+		}
 	}
 
 }
@@ -537,7 +547,7 @@ func main() {
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.BoolVar(&exposeMetrics, "expose-metrics", false, "Expose prometheus metrics")
 	flag.StringVar(&metricsListenAddress, "metrics-listen", "127.0.0.1", "IP to bind to for metrics")
-	flag.IntVar(&metricsPort, "metrics-port", 2112, "Port for metrics")
+	flag.IntVar(&metricsPort, "metrics-port", 9100, "Port for metrics")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -612,12 +622,15 @@ func main() {
 
 	}
 
+	go func() {
+		if exposeMetrics {
+			logrus.Infof("Enabled metrics on %s...\n", metricsListenAddress+":"+strconv.Itoa(metricsPort)+"/metrics")
+			http.Handle("/metrics", promhttp.Handler())
+			http.ListenAndServe(metricsListenAddress+":"+strconv.Itoa(metricsPort), nil)
+
+		}
+	}()
+
 	logrus.Infof("Listening on %s...\n", listenAddress)
 	logrus.Fatalln(http.ListenAndServe(listenAddress, p))
-
-	if exposeMetrics {
-		http.Handle("/metrics", promhttp.Handler())
-		http.ListenAndServe(metricsListenAddress+":"+strconv.Itoa(metricsPort), nil)
-		logrus.Infof("Enabled metrics on %s...\n", metricsListenAddress+":"+strconv.Itoa(metricsPort))
-	}
 }
