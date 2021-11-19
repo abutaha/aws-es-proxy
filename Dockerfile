@@ -1,11 +1,11 @@
-FROM golang:1.14-alpine
+FROM golang:1.17-alpine as builder
 
 WORKDIR /go/src/github.com/abutaha/aws-es-proxy
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -o aws-es-proxy
 
-FROM alpine:3.11
+FROM alpine:3.15
 LABEL name="aws-es-proxy" \
       version="latest"
 
@@ -16,5 +16,5 @@ COPY --from=0 /go/src/github.com/abutaha/aws-es-proxy/aws-es-proxy /usr/local/bi
 ENV PORT_NUM 9200
 EXPOSE ${PORT_NUM}
 
-ENTRYPOINT ["aws-es-proxy"] 
+ENTRYPOINT ["aws-es-proxy"]
 CMD ["-h"]
