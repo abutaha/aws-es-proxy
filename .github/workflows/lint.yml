@@ -1,0 +1,13 @@
+name: lint & build
+on: push
+
+jobs:
+  lint-build:
+    name: lint & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: run make lint
+        run: make lint
+      - name: run make build-linux
+        run: make build-linux
