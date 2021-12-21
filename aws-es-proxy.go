@@ -233,6 +233,7 @@ func (p *proxy) getSigner() *v4.Signer {
 	return v4.NewSigner(p.credentials)
 }
 
+// nolint: errcheck // TODO handle all errors
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if p.remoteTerminate && r.URL.Path == "/terminate-proxy" && r.Method == http.MethodPost {
 		logrus.Infoln("Terminate Signal")
@@ -244,7 +245,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(p.username)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(p.password)) != 1 {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", p.realm))
-			w.WriteHeader(401)
+			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte("Unauthorised.\n"))
 			return
 		}
@@ -264,7 +265,12 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defer r.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not close body")
+		}
+	}()
 
 	proxied := *r.URL
 	proxied.Host = p.host
@@ -304,7 +310,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !p.nosignreq {
 		// AWS credentials expired, need to generate fresh ones
-		if resp.StatusCode == 403 {
+		if resp.StatusCode == http.StatusForbidden {
 			logrus.Errorln("Received 403 from AWSAuth, invalidating credentials for retrial")
 			p.credentials = nil
 
@@ -316,11 +322,16 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			logrus.Debugln("Received headers from AWS:", resp.Header)
-			logrus.Debugln("Received body from AWS:", string(b.Bytes()))
+			logrus.Debugln("Received body from AWS:", b.String())
 		}
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		err := r.Body.Close()
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not close body")
+		}
+	}()
 
 	// Write back headers to requesting client
 	copyHeaders(w.Header(), resp.Header)
@@ -334,7 +345,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(resp.StatusCode)
-	w.Write(body.Bytes())
+
+	defer func() {
+		_, err := w.Write(body.Bytes())
+		if err != nil {
+			logrus.WithError(err).Errorf("Could not write data")
+		}
+	}()
 
 	requestEnded := time.Since(requestStarted)
 
@@ -371,7 +388,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("Status: ", resp.StatusCode)
 			fmt.Printf("Took: %.3fs\n", requestEnded.Seconds())
 			fmt.Println("Body: ")
-			fmt.Println(string(prettyBody.Bytes()))
+			fmt.Println(prettyBody.String())
 		} else {
 			log.Printf(" -> %s; %s; %s; %s; %d; %.3fs\n",
 				r.Method, r.RemoteAddr,
@@ -397,7 +414,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		respStruct := &responseStruct{
 			Requestid: requestID,
-			Body:      string(body.Bytes()),
+			Body:      body.String(),
 		}
 
 		y, _ := json.Marshal(reqStruct)
