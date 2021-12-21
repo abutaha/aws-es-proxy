@@ -2,10 +2,14 @@ name: lint & build
 on: push
 
 jobs:
-  lint-build:
-    name: lint & build
+  lint:
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '^1.17'
+      - run: go version
       - name: run make lint
         run: make lint
