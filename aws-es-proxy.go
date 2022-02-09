@@ -444,6 +444,11 @@ func addHeaders(src, dest http.Header) {
 
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
+		dest.Add("osd-xsrf", val[0])
+	}
+
+	if val, ok := src["osd-xsrf"]; ok {
+		dest.Add("osd-xsrf", val[0])
 	}
 
 	if val, ok := src["Authorization"]; ok {
@@ -468,7 +473,6 @@ func copyHeaders(dst, src http.Header) {
 				dst.Add(k, v)
 			}
 		}
-
 	}
 }
 
