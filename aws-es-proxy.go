@@ -444,11 +444,11 @@ func addHeaders(src, dest http.Header) {
 
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
-		dest.Add("osd-xsrf", val[0])
+		dest.Add("Osd-Xsrf", val[0])
 	}
 
-	if val, ok := src["osd-xsrf"]; ok {
-		dest.Add("osd-xsrf", val[0])
+	if val, ok := src["Osd-Xsrf"]; ok {
+		dest.Add("Osd-Xsrf", val[0])
 	}
 
 	if val, ok := src["Authorization"]; ok {
