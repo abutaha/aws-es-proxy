@@ -214,6 +214,7 @@ func (p *proxy) getSigner() *v4.Signer {
 		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
 			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
+			// nolint:staticcheck
 			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
 		} else if p.assumeRole != "" {
 			logrus.Infof("Assuming credentials from %s", p.assumeRole)
