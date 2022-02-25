@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httputil"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"path"
@@ -213,6 +214,7 @@ func (p *proxy) getSigner() *v4.Signer {
 		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
 			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
+			// nolint:staticcheck
 			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
 		} else if p.assumeRole != "" {
 			logrus.Infof("Assuming credentials from %s", p.assumeRole)
@@ -501,6 +503,7 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		enablePprof     bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -518,6 +521,8 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.BoolVar(&enablePprof, "enable-pprof", false, "enable pprof endpoint on port 6060")
+
 	flag.Parse()
 
 	if endpoint == "" {
@@ -589,6 +594,20 @@ func main() {
 		p.fileRequest = fileRequest
 		p.fileResponse = fileResponse
 
+	}
+
+	if enablePprof {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/debug/pprof/", pprof.Index)
+		mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+		go func() {
+			logrus.Infof("Debug listening on %s...\n", ":6060")
+
+			log.Fatal(http.ListenAndServe(":6060", mux))
+		}()
 	}
 
 	logrus.Infof("Listening on %s...\n", listenAddress)
