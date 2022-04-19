@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-IMAGE=trackunit/aws-es-proxy:$(date -u +"%Y-%m-%d-%H%M")
+IMAGE=trackunit/aws-es-proxy:1.3-$(date -u +"%Y-%m-%d-%H%M")
 
 docker build . --no-cache -f Dockerfile  --pull -t "${IMAGE}"
 docker push "${IMAGE}"
