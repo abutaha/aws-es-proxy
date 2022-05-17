@@ -3,11 +3,7 @@
 SYSTEM                := $(shell uname -s | tr A-Z a-z)_$(shell uname -m | sed "s/x86_64/amd64/")
 GO_PREFIX             := CGO_ENABLED=0 GOFLAGS=-mod=vendor
 GO                    := $(GO_PREFIX) go
-# This collects every path, which contains go files in the current project
-LINT_TARGETS          ?= $(shell $(GO) list -f '{{.Dir}}' ./... | sed -e"s|${CURDIR}/\(.*\)\$$|\1/...|g" | grep -v node_modules/ )
-# The current version of golangci-lint.
-# See: https://github.com/golangci/golangci-lint/releases
-GOLANGCI_LINT_VERSION := 1.30.0
+GOLANGCI_LINT_VERSION := 1.39.0
 
 # Executes the linter on all our go files inside of the project
 .PHONY: lint
