@@ -1,4 +1,4 @@
-# github.com/aws/aws-sdk-go v1.43.8
+# github.com/aws/aws-sdk-go v1.44.15
 ## explicit; go 1.11
 github.com/aws/aws-sdk-go/aws
 github.com/aws/aws-sdk-go/aws/awserr
@@ -46,13 +46,13 @@ github.com/jmespath/go-jmespath
 # github.com/sirupsen/logrus v1.8.1
 ## explicit; go 1.13
 github.com/sirupsen/logrus
-# go.mongodb.org/mongo-driver v1.8.3
+# go.mongodb.org/mongo-driver v1.9.1
 ## explicit; go 1.10
 go.mongodb.org/mongo-driver/bson/primitive
-# golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+# golang.org/x/net v0.0.0-20220516155154-20f960328961
 ## explicit; go 1.17
 golang.org/x/net/publicsuffix
-# golang.org/x/sys v0.0.0-20220224120231-95c6836cb0e7
+# golang.org/x/sys v0.0.0-20220513210249-45d2b4557a2a
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
