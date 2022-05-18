@@ -1,0 +1,88 @@
+version: 2.1
+
+orbs:
+  kubernetes: oak/kubernetes@0.1.0
+  utils: oak/utils@0.0.1
+
+aliases:
+  - &only-master
+    branches:
+      only:
+        - master
+
+  - &only-prs
+    branches:
+      ignore:
+        - master
+
+  - &base-image
+    resource_class: small
+    docker:
+      - image: cimg/base:2022.03
+
+  - &devops-image
+    resource_class: small
+    docker:
+      - image: 049961945951.dkr.ecr.us-east-1.amazonaws.com/devops-neo:3
+
+  - &run-on-release
+    filters:
+      tags:
+        only:
+          - /\d+\.\d+\.\d+/
+      branches:
+        ignore: /.*/
+
+  - &ssh-fingerprint
+    fingerprints:
+      - e9:12:fd:9e:1a:78:da:f6:c0:26:4d:0b:35:0a:08:15
+
+jobs:
+  create-git-tag:
+    <<: *devops-image
+    steps:
+      - checkout
+      - add_ssh_keys:
+          <<: *ssh-fingerprint
+      - utils/create-git-tag
+
+  container-build-push:
+    <<: [*base-image]
+    parameters:
+      repo:
+        type: string
+        description: 'Name of the container image repo to build without the registry prefix'
+      tag:
+        type: string
+        description: 'Tag that image should have'
+        default: 'sha-${CIRCLE_BRANCH}-${CIRCLE_SHA1:0:7}-$(date +%F)-${CIRCLE_BUILD_NUM}'
+    steps:
+      - checkout
+      - kubernetes/container-build-push:
+          path: ./
+          dockerfile: Dockerfile
+          repo: << parameters.repo >>
+          tag: << parameters.tag >>
+      - store_artifacts:
+          path: /tmp/lacework-data
+
+workflows:
+  git-tag-creation-workflow:
+    jobs:
+      - create-git-tag:
+          context: marmot-deploy-dev
+          filters:
+            <<: *only-master
+
+  container-workflow:
+    jobs:
+      - kubernetes/kube-linter:
+          name: kube-linter
+          context: marmot-deploy-dev
+      - container-build-push:
+          name: Build and Push
+          path: example_service
+          repo: example-service
+          context: marmot-deploy-dev
+          requires:
+            - kube-linter
