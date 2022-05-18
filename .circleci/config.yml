@@ -39,11 +39,11 @@ aliases:
 
 jobs:
   create-git-tag:
-    <<: *devops-image
+    <<: [*devops-image]
     steps:
       - checkout
-      - add_ssh_keys:
-          <<: *ssh-fingerprint
+      # - add_ssh_keys:
+      #     <<: *ssh-fingerprint
       - utils/create-git-tag
 
   container-build-push:
@@ -81,8 +81,7 @@ workflows:
           context: marmot-deploy-dev
       - container-build-push:
           name: Build and Push
-          path: example_service
-          repo: example-service
+          repo: aws-es-proxy
           context: marmot-deploy-dev
           requires:
             - kube-linter
