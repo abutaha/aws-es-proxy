@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httputil"
 	"net/url"
 	"os"
@@ -28,6 +29,7 @@ import (
 	v4 "github.com/aws/aws-sdk-go/aws/signer/v4"
 	"github.com/sirupsen/logrus"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/net/publicsuffix"
 )
 
 func logger(debug bool) {
@@ -70,23 +72,25 @@ type responseStruct struct {
 }
 
 type proxy struct {
-	scheme       string
-	host         string
-	region       string
-	service      string
-	endpoint     string
-	verbose      bool
-	prettify     bool
-	logtofile    bool
-	nosignreq    bool
-	fileRequest  *os.File
-	fileResponse *os.File
-	credentials  *credentials.Credentials
-	httpClient   *http.Client
-	auth         bool
-	username     string
-	password     string
-	realm        string
+	scheme          string
+	host            string
+	region          string
+	service         string
+	endpoint        string
+	verbose         bool
+	prettify        bool
+	logtofile       bool
+	nosignreq       bool
+	fileRequest     *os.File
+	fileResponse    *os.File
+	credentials     *credentials.Credentials
+	httpClient      *http.Client
+	auth            bool
+	username        string
+	password        string
+	realm           string
+	remoteTerminate bool
+	assumeRole      string
 }
 
 type jwt_header struct {
@@ -99,22 +103,30 @@ func newProxy(args ...interface{}) *proxy {
 		return http.ErrUseLastResponse
 	}
 
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	client := http.Client{
 		Timeout:       time.Duration(args[5].(int)) * time.Second,
 		CheckRedirect: noRedirect,
+		Jar:           jar,
 	}
 
 	return &proxy{
-		endpoint:   args[0].(string),
-		verbose:    args[1].(bool),
-		prettify:   args[2].(bool),
-		logtofile:  args[3].(bool),
-		nosignreq:  args[4].(bool),
-		httpClient: &client,
-		auth:       args[6].(bool),
-		username:   args[7].(string),
-		password:   args[8].(string),
-		realm:      args[9].(string),
+		endpoint:        args[0].(string),
+		verbose:         args[1].(bool),
+		prettify:        args[2].(bool),
+		logtofile:       args[3].(bool),
+		nosignreq:       args[4].(bool),
+		httpClient:      &client,
+		auth:            args[6].(bool),
+		username:        args[7].(string),
+		password:        args[8].(string),
+		realm:           args[9].(string),
+		remoteTerminate: args[10].(bool),
+		assumeRole:      args[11].(string),
 	}
 }
 
@@ -190,7 +202,6 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-
 		sess, err := session.NewSession(
 			&aws.Config{
 				Region:                        aws.String(p.region),
@@ -201,13 +212,26 @@ func (p *proxy) getSigner() *v4.Signer {
 			logrus.Debugln(err)
 		}
 
-		credentials := sess.Config.Credentials
 		awsRoleARN := os.Getenv("AWS_ROLE_ARN")
 		awsWebIdentityTokenFile := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
+
+		var creds *credentials.Credentials
 		if awsRoleARN != "" && awsWebIdentityTokenFile != "" {
-			credentials = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+			logrus.Infof("Using web identity credentials with role %s", awsRoleARN)
+			creds = stscreds.NewWebIdentityCredentials(sess, awsRoleARN, "", awsWebIdentityTokenFile)
+		} else if p.assumeRole != "" {
+			logrus.Infof("Assuming credentials from %s", p.assumeRole)
+			creds = stscreds.NewCredentials(sess, p.assumeRole, func(provider *stscreds.AssumeRoleProvider) {
+				provider.Duration = 17 * time.Minute
+				provider.ExpiryWindow = 13 * time.Minute
+				provider.MaxJitterFrac = 0.1
+			})
+		} else {
+			logrus.Infoln("Using default credentials")
+			creds = sess.Config.Credentials
 		}
-		p.credentials = credentials
+
+		p.credentials = creds
 		logrus.Infoln("Generated fresh AWS Credentials object")
 	}
 
@@ -215,6 +239,10 @@ func (p *proxy) getSigner() *v4.Signer {
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if p.remoteTerminate && r.URL.Path == "/terminate-proxy" && r.Method == http.MethodPost {
+		logrus.Infoln("Terminate Signal")
+		os.Exit(0)
+	}
 
 	if p.auth {
 		user, pass, ok := r.BasicAuth()
@@ -263,7 +291,13 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Sign the request with AWSv4
 		payload := bytes.NewReader(replaceBody(req))
-		signer.Sign(req, payload, p.service, p.region, time.Now())
+		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
+		if err != nil {
+			p.credentials = nil
+			logrus.Errorln("Failed to sign", err)
+			http.Error(w, "Failed to sign", http.StatusForbidden)
+			return
+		}
 	}
 
 	resp, err := p.httpClient.Do(req)
@@ -409,6 +443,10 @@ func addHeaders(src, dest http.Header) {
 	if val, ok := src["Kbn-Xsrf"]; ok {
 		dest.Add("Kbn-Xsrf", val[0])
 	}
+
+	if val, ok := src["Authorization"]; ok {
+		dest.Add("Authorization", val[0])
+	}
 }
 
 // Signer.Sign requires a "seekable" body to sum body's sha256
@@ -435,22 +473,24 @@ func copyHeaders(dst, src http.Header) {
 func main() {
 
 	var (
-		debug         bool
-		auth          bool
-		username      string
-		password      string
-		realm         string
-		verbose       bool
-		prettify      bool
-		logtofile     bool
-		nosignreq     bool
-		ver           bool
-		endpoint      string
-		listenAddress string
-		fileRequest   *os.File
-		fileResponse  *os.File
-		err           error
-		timeout       int
+		debug           bool
+		auth            bool
+		username        string
+		password        string
+		realm           string
+		verbose         bool
+		prettify        bool
+		logtofile       bool
+		nosignreq       bool
+		ver             bool
+		endpoint        string
+		listenAddress   string
+		fileRequest     *os.File
+		fileResponse    *os.File
+		err             error
+		timeout         int
+		remoteTerminate bool
+		assumeRole      string
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -466,6 +506,8 @@ func main() {
 	flag.StringVar(&username, "username", "", "HTTP Basic Auth Username")
 	flag.StringVar(&password, "password", "", "HTTP Basic Auth Password")
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
+	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
+	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -511,6 +553,8 @@ func main() {
 		username,
 		password,
 		realm,
+		remoteTerminate,
+		assumeRole,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
