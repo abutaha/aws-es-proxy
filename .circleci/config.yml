@@ -3,6 +3,7 @@ version: 2.1
 orbs:
   kubernetes: oak/kubernetes@0.1.0
   utils: oak/utils@0.0.1
+  aws-cli: circleci/aws-cli@3.1.1
 
 aliases:
   - &only-master
@@ -58,6 +59,7 @@ jobs:
         default: 'sha-${CIRCLE_BRANCH}-${CIRCLE_SHA1:0:7}-$(date +%F)-${CIRCLE_BUILD_NUM}'
     steps:
       - checkout
+      - aws-cli/install
       - kubernetes/container-build-push:
           path: ./
           dockerfile: Dockerfile
