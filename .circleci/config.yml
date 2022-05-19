@@ -7,14 +7,10 @@ orbs:
 
 aliases:
   - &only-master
-    branches:
-      only:
-        - master
-
-  - &only-prs
-    branches:
-      ignore:
-        - master
+    filters:
+      branches:
+        only:
+          - master
 
   - &base-image
     resource_class: small
@@ -32,7 +28,7 @@ aliases:
         only:
           - /\d+\.\d+\.\d+/
       branches:
-        ignore: /.*/
+        only: /.*/
 
   - &ssh-fingerprint
     fingerprints:
@@ -47,41 +43,31 @@ jobs:
           <<: *ssh-fingerprint
       - utils/create-git-tag
 
-  container-build-push:
-    <<: [*base-image]
-    parameters:
-      repo:
-        type: string
-        description: 'Name of the container image repo to build without the registry prefix'
-      tag:
-        type: string
-        description: 'Tag that image should have'
-        default: 'sha-${CIRCLE_BRANCH}-${CIRCLE_SHA1:0:7}-$(date +%F)-${CIRCLE_BUILD_NUM}'
-    steps:
-      - checkout
-      - kubernetes/container-build-push:
-          path: ./
-          dockerfile: Dockerfile
-          repo: << parameters.repo >>
-          tag: << parameters.tag >>
-
-
 workflows:
   git-tag-creation-workflow:
     jobs:
       - create-git-tag:
           context: marmot-deploy-dev
-          filters:
-            <<: *only-master
+          <<: *only-master
 
   container-workflow:
     jobs:
       - kubernetes/kube-linter:
           name: kube-linter
           context: marmot-deploy-dev
-      - container-build-push:
+          <<: *run-on-release
+      - kubernetes/container-build-push:
           name: Build and Push
+          path: ./
+          dockerfile: Dockerfile
           repo: aws-es-proxy
+          tag: '${CIRCLE_TAG:-sha-${CIRCLE_BRANCH}-${CIRCLE_SHA1:0:7}-$(date +%F)-${CIRCLE_BUILD_NUM}}'
           context: marmot-deploy-dev
+          <<: *run-on-release
           requires:
             - kube-linter
+
+
+
+
+      - container-build-push:
