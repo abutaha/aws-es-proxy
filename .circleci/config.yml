@@ -66,8 +66,3 @@ workflows:
           <<: *run-on-release
           requires:
             - kube-linter
-
-
-
-
-      - container-build-push:
