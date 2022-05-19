@@ -1,7 +1,7 @@
 version: 2.1
 
 orbs:
-  kubernetes: oak/kubernetes@dev:76f6857
+  kubernetes: oak/kubernetes@dev:c1dcf39
   utils: oak/utils@0.0.1
   aws-cli: circleci/aws-cli@3.1.1
 
@@ -44,11 +44,6 @@ jobs:
       - utils/create-git-tag
 
 workflows:
-  git-tag-creation-workflow:
-    jobs:
-      - create-git-tag:
-          context: marmot-deploy-dev
-          <<: *only-master
 
   container-workflow:
     jobs:
@@ -66,3 +61,8 @@ workflows:
           <<: *run-on-release
           requires:
             - kube-linter
+      - create-git-tag:
+          context: marmot-deploy-dev
+          <<: *only-master
+          requires:
+            - Build and Push
