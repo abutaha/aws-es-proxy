@@ -65,10 +65,12 @@ type requestStruct struct {
 	Body       string
 }
 
+/*
 type responseStruct struct {
 	Requestid string
 	Body      string
 }
+*/
 
 type proxy struct {
 	scheme          string
@@ -395,17 +397,21 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Body:       query,
 		}
 
+		/*
 		respStruct := &responseStruct{
 			Requestid: requestID,
 			Body:      string(body.Bytes()),
 		}
+		*/
 
 		y, _ := json.Marshal(reqStruct)
 		z, _ := json.Marshal(respStruct)
 		p.fileRequest.Write(y)
 		p.fileRequest.WriteString("\n")
+		/*
 		p.fileResponse.Write(z)
 		p.fileResponse.WriteString("\n")
+		*/
 
 	}
 
@@ -471,7 +477,7 @@ func main() {
 		endpoint        string
 		listenAddress   string
 		fileRequest     *os.File
-		fileResponse    *os.File
+		//fileResponse    *os.File
 		err             error
 		timeout         int
 		remoteTerminate bool
@@ -481,7 +487,7 @@ func main() {
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
 	flag.StringVar(&listenAddress, "listen", "127.0.0.1:9200", "Local TCP port to listen on")
 	flag.BoolVar(&verbose, "verbose", false, "Print user requests")
-	flag.BoolVar(&logtofile, "log-to-file", false, "Log user requests and ElasticSearch responses to files")
+	flag.BoolVar(&logtofile, "log-to-file", false, "Log requests to file")
 	flag.BoolVar(&prettify, "pretty", false, "Prettify verbose and file output")
 	flag.BoolVar(&nosignreq, "no-sign-reqs", false, "Disable AWS Signature v4")
 	flag.BoolVar(&debug, "debug", false, "Print debug messages")
@@ -515,7 +521,7 @@ func main() {
 
 	if ver {
 		version := 1.1
-		logrus.Infof("Current version is: v%.1f", version)
+		logrus.Infof("Current version is: v%.1f-fsisac", version)
 		os.Exit(0)
 	}
 
@@ -554,15 +560,16 @@ func main() {
 			log.Fatalln(err.Error())
 		}
 		defer fileRequest.Close()
+		p.fileRequest = fileRequest
 
+		/*
 		responseFname := fmt.Sprintf("response-%s.log", primitive.NewObjectID().Hex())
 		if fileResponse, err = os.Create(responseFname); err != nil {
 			log.Fatalln(err.Error())
 		}
 		defer fileResponse.Close()
-
-		p.fileRequest = fileRequest
 		p.fileResponse = fileResponse
+		*/
 
 	}
 
