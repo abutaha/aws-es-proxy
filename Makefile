@@ -3,7 +3,7 @@
 SYSTEM                := $(shell uname -s | tr A-Z a-z)_$(shell uname -m | sed "s/x86_64/amd64/")
 GO_PREFIX             := CGO_ENABLED=0 GOFLAGS=-mod=vendor
 GO                    := $(GO_PREFIX) go
-GOLANGCI_LINT_VERSION := 1.39.0
+GOLANGCI_LINT_VERSION := 1.49.0
 
 # Executes the linter on all our go files inside of the project
 .PHONY: lint
