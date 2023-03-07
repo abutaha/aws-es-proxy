@@ -3,4 +3,3 @@ vendor
 glide.lock
 dist
 .idea
-go.sum
