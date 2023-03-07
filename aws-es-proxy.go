@@ -171,6 +171,7 @@ func (p *proxy) parseEndpoint() error {
 		for _, partition := range endpoints.DefaultPartitions() {
 			for region := range partition.Regions() {
 				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.es.%s", region, partition.DNSSuffix()))
+				awsEndpoints = append(awsEndpoints, fmt.Sprintf("%s.aoss.%s", region, partition.DNSSuffix()))
 			}
 		}
 
@@ -186,7 +187,7 @@ func (p *proxy) parseEndpoint() error {
 		if isAWSEndpoint {
 			// Extract region and service from link. This should be save now
 			parts := strings.Split(link.Host, ".")
-			p.region, p.service = parts[1], "es"
+			p.region, p.service = parts[1], parts[2]
 			logrus.Debugln("AWS Region", p.region)
 		}
 	}
