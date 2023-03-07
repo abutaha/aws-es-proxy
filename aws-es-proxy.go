@@ -523,7 +523,7 @@ func main() {
 	}
 
 	if ver {
-		version := 1.4
+		version := 1.5
 		logrus.Infof("Current version is: v%.1f", version)
 		os.Exit(0)
 	}
