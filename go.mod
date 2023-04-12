@@ -1,4 +1,4 @@
-module github.com/abutaha/aws-es-proxy
+module github.com/PeterCiuffetti/aws-es-proxy
 
 go 1.20
 
