@@ -241,13 +241,15 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.auth {
-		user, pass, ok := r.BasicAuth()
+		if r.Method != http.MethodOptions {
+			user, pass, ok := r.BasicAuth()
 
-		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(p.username)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(p.password)) != 1 {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", p.realm))
-			w.WriteHeader(401)
-			_, _ = w.Write([]byte("Unauthorised.\n"))
-			return
+			if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(p.username)) != 1 || subtle.ConstantTimeCompare([]byte(pass), []byte(p.password)) != 1 {
+				w.Header().Set("WWW-Authenticate", fmt.Sprintf("Basic realm=\"%s\"", p.realm))
+				w.WriteHeader(401)
+				_, _ = w.Write([]byte("Unauthorised.\n"))
+				return
+			}
 		}
 	}
 
