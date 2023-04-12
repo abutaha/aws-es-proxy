@@ -124,8 +124,12 @@ For a full list of available options, use `-h`:
 ```sh
 ./aws-es-proxy -h
 Usage of ./aws-es-proxy:
+  -assume string
+        Optionally specify role to assume
   -auth
         Require HTTP Basic Auth
+  -block-deletes
+        Block delete requests, defaults to false
   -debug
         Print debug messages
   -endpoint string
