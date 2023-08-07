@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/subtle"
+	"crypto/tls"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,7 +33,6 @@ import (
 )
 
 func logger(debug bool) {
-
 	formatFilePath := func(path string) string {
 		arr := strings.Split(path, "/")
 		return arr[len(arr)-1]
@@ -93,7 +93,6 @@ type proxy struct {
 }
 
 func newProxy(args ...interface{}) *proxy {
-
 	noRedirect := func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
@@ -122,6 +121,8 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		region:          args[12].(string),
+		service:         "es",
 	}
 }
 
@@ -158,9 +159,8 @@ func (p *proxy) parseEndpoint() error {
 	p.scheme = link.Scheme
 	p.host = link.Host
 
-	// AWS SignV4 enabled, extract required parts for signing process
-	if !p.nosignreq {
-
+	// AWS SignV4 enabled, extract required parts for signing process (if region flag is not supplied)
+	if !p.nosignreq && p.region == "" {
 		split := strings.SplitAfterN(link.Hostname(), ".", 2)
 
 		if len(split) < 2 {
@@ -382,7 +382,6 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if p.logtofile {
-
 		requestID := primitive.NewObjectID().Hex()
 
 		reqStruct := &requestStruct{
@@ -460,7 +459,6 @@ func copyHeaders(dst, src http.Header) {
 				dst.Add(k, v)
 			}
 		}
-
 	}
 }
 
@@ -485,6 +483,8 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		region          string
+		insecure        bool
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -502,6 +502,8 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.StringVar(&region, "region", "", "AWS Region, optional (ex. us-west-2)")
+	flag.BoolVar(&insecure, "insecure", false, "Verify SSL")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -549,7 +551,14 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		region,
 	)
+
+	if insecure == true {
+		p.httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 
 	if err = p.parseEndpoint(); err != nil {
 		logrus.Fatalln(err)
@@ -557,7 +566,6 @@ func main() {
 	}
 
 	if p.logtofile {
-
 		requestFname := fmt.Sprintf("request-%s.log", primitive.NewObjectID().Hex())
 		if fileRequest, err = os.Create(requestFname); err != nil {
 			log.Fatalln(err.Error())
@@ -572,7 +580,6 @@ func main() {
 
 		p.fileRequest = fileRequest
 		p.fileResponse = fileResponse
-
 	}
 
 	logrus.Infof("Listening on %s...\n", listenAddress)
