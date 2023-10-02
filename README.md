@@ -1,3 +1,8 @@
+# ARCHIVED
+
+We do not use AWS ElasticSearch (OpenSearch now) anymore
+
+
 # aws-es-proxy
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/abutaha/aws-es-proxy.svg)](https://hub.docker.com/r/abutaha/aws-es-proxy/)
