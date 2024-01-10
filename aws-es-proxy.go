@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,6 +32,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/net/publicsuffix"
 )
+
+const emptyBodySHA256 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
 func logger(debug bool) {
 
@@ -285,8 +289,25 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// Start AWS session from ENV, Shared Creds or EC2Role
 		signer := p.getSigner()
 
+		contentSha256Hash := emptyBodySHA256
+		body := replaceBody(req)
+
+		if len(body) > 0 {
+			hash, err := hexEncodedSha256(body)
+			if err != nil {
+				logrus.WithError(err).Errorln("failed to calculate hash of request body: %w", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			contentSha256Hash = hash
+		}
+
+		// Add the "X-Amz-Content-Sha256" header as required by Amazon OpenSearch Serverless.
+		req.Header.Set("X-Amz-Content-Sha256", contentSha256Hash)
+
 		// Sign the request with AWSv4
-		payload := bytes.NewReader(replaceBody(req))
+		payload := bytes.NewReader(body)
 		_, err := signer.Sign(req, payload, p.service, p.region, time.Now())
 		if err != nil {
 			p.credentials = nil
@@ -441,6 +462,15 @@ func addHeaders(src, dest http.Header) {
 	if val, ok := src["Authorization"]; ok {
 		dest.Add("Authorization", val[0])
 	}
+}
+
+func hexEncodedSha256(b []byte) (string, error) {
+	hasher := sha256.New()
+	if _, err := hasher.Write(b); err != nil {
+		return "", fmt.Errorf("failed to write: %w", err)
+	}
+	digest := hasher.Sum(nil)
+	return hex.EncodeToString(digest), nil
 }
 
 // Signer.Sign requires a "seekable" body to sum body's sha256
