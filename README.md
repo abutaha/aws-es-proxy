@@ -64,6 +64,12 @@ export AWS_ACCESS_KEY_ID=AKID1234567890
 export AWS_SECRET_ACCESS_KEY=MY-SECRET-KEY
 ```
 
+You can also use AWS profiles to manage multiple sets of credentials. Specify the profile using the `-aws-profile` flag:
+
+```sh
+./aws-es-proxy -aws-profile myprofile -endpoint https://my-es-domain.region.es.amazonaws.com
+```
+
 **aws-es-proxy** also supports `IAM roles`. To use IAM roles, you need to modify your Amazon Elasticsearch access policy to allow access from that role. Below is an Amazon Elasticsearch `access policy` example allowing access from any EC2 instance with an IAM role called `ec2-aws-elasticsearch`.
 
 ```json
@@ -98,6 +104,13 @@ export ENDPOINT=https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
 
 ./aws-es-proxy  -listen 10.0.0.1:9200 -verbose
 Listening on 10.0.0.1:9200
+```
+
+Using a specific AWS profile:
+
+```sh
+./aws-es-proxy -aws-profile production -endpoint https://test-es-somerandomvalue.eu-west-1.es.amazonaws.com
+Listening on 127.0.0.1:9200
 ```
 
 *aws-es-proxy* listens on 127.0.0.1:9200 if no additional argument is provided. You can change the IP and Port passing the argument `-listen`
@@ -136,6 +149,8 @@ Usage of ./aws-es-proxy:
         Log user requests and ElasticSearch responses to files
   -no-sign-reqs
         Disable AWS Signature v4
+  -aws-profile string
+        AWS credential profile name to use
   -password string
         HTTP Basic Auth Password
   -pretty

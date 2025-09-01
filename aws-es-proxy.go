@@ -90,6 +90,7 @@ type proxy struct {
 	realm           string
 	remoteTerminate bool
 	assumeRole      string
+	profile         string
 }
 
 func newProxy(args ...interface{}) *proxy {
@@ -122,6 +123,7 @@ func newProxy(args ...interface{}) *proxy {
 		realm:           args[9].(string),
 		remoteTerminate: args[10].(bool),
 		assumeRole:      args[11].(string),
+		profile:         args[12].(string),
 	}
 }
 
@@ -198,12 +200,25 @@ func (p *proxy) parseEndpoint() error {
 func (p *proxy) getSigner() *v4.Signer {
 	// Refresh credentials after expiration. Required for STS
 	if p.credentials == nil {
-		sess, err := session.NewSession(
-			&aws.Config{
+		// Set profile if specified
+		if p.profile != "" {
+			logrus.Infof("Using AWS profile: %s", p.profile)
+		}
+
+		sessOptions := session.Options{
+			Config: aws.Config{
 				Region:                        aws.String(p.region),
 				CredentialsChainVerboseErrors: aws.Bool(true),
 			},
-		)
+			SharedConfigState: session.SharedConfigEnable,
+		}
+
+		// Set profile if specified
+		if p.profile != "" {
+			sessOptions.Profile = p.profile
+		}
+
+		sess, err := session.NewSessionWithOptions(sessOptions)
 		if err != nil {
 			logrus.Debugln(err)
 		}
@@ -223,7 +238,11 @@ func (p *proxy) getSigner() *v4.Signer {
 				provider.MaxJitterFrac = 0.1
 			})
 		} else {
-			logrus.Infoln("Using default credentials")
+			if p.profile != "" {
+				logrus.Infof("Using credentials from AWS profile: %s", p.profile)
+			} else {
+				logrus.Infoln("Using default credentials")
+			}
 			creds = sess.Config.Credentials
 		}
 
@@ -485,6 +504,7 @@ func main() {
 		timeout         int
 		remoteTerminate bool
 		assumeRole      string
+		profile         string
 	)
 
 	flag.StringVar(&endpoint, "endpoint", "", "Amazon ElasticSearch Endpoint (e.g: https://dummy-host.eu-west-1.es.amazonaws.com)")
@@ -502,6 +522,7 @@ func main() {
 	flag.StringVar(&realm, "realm", "", "Authentication Required")
 	flag.BoolVar(&remoteTerminate, "remote-terminate", false, "Allow HTTP remote termination")
 	flag.StringVar(&assumeRole, "assume", "", "Optionally specify role to assume")
+	flag.StringVar(&profile, "aws-profile", "", "AWS credential profile name to use")
 	flag.Parse()
 
 	if endpoint == "" {
@@ -549,6 +570,7 @@ func main() {
 		realm,
 		remoteTerminate,
 		assumeRole,
+		profile,
 	)
 
 	if err = p.parseEndpoint(); err != nil {
